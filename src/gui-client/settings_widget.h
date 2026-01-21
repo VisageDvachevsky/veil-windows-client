@@ -51,6 +51,7 @@ class SettingsWidget : public QWidget {
   void createRoutingSection(QWidget* parent);
   void createConnectionSection(QWidget* parent);
   void createDpiBypassSection(QWidget* parent);
+  void createTunInterfaceSection(QWidget* parent);
   void createAdvancedSection(QWidget* parent);
 
   bool isValidHostname(const QString& hostname) const;
@@ -83,6 +84,14 @@ class SettingsWidget : public QWidget {
   // DPI Bypass
   QComboBox* dpiModeCombo_;
   QLabel* dpiDescLabel_;
+
+  // TUN Interface
+  QLineEdit* tunDeviceNameEdit_;
+  QLineEdit* tunIpAddressEdit_;
+  QLineEdit* tunNetmaskEdit_;
+  QSpinBox* tunMtuSpinBox_;
+  QLabel* tunIpValidationLabel_;
+  QLabel* tunNetmaskValidationLabel_;
 
   // Advanced
   QCheckBox* obfuscationCheck_;

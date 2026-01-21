@@ -73,6 +73,7 @@ void SettingsWidget::setupUi() {
   // Create sections
   createServerSection(scrollWidget);
   createCryptoSection(scrollWidget);
+  createTunInterfaceSection(scrollWidget);
   createRoutingSection(scrollWidget);
   createConnectionSection(scrollWidget);
   createDpiBypassSection(scrollWidget);
@@ -387,6 +388,98 @@ void SettingsWidget::createDpiBypassSection(QWidget* parent) {
   parent->layout()->addWidget(group);
 }
 
+void SettingsWidget::createTunInterfaceSection(QWidget* parent) {
+  auto* group = new QGroupBox("TUN Interface", parent);
+  auto* layout = new QVBoxLayout(group);
+  layout->setSpacing(12);
+
+  // Device Name
+  auto* deviceNameLabel = new QLabel("Device Name", group);
+  deviceNameLabel->setProperty("textStyle", "secondary");
+  layout->addWidget(deviceNameLabel);
+
+  tunDeviceNameEdit_ = new QLineEdit(group);
+  tunDeviceNameEdit_->setPlaceholderText("veil0");
+  tunDeviceNameEdit_->setToolTip("Name of the virtual network interface (e.g., veil0, tun0)");
+  connect(tunDeviceNameEdit_, &QLineEdit::textChanged, [this]() {
+    hasUnsavedChanges_ = true;
+  });
+  layout->addWidget(tunDeviceNameEdit_);
+
+  // IP Address
+  auto* ipLabel = new QLabel("IP Address", group);
+  ipLabel->setProperty("textStyle", "secondary");
+  layout->addWidget(ipLabel);
+
+  tunIpAddressEdit_ = new QLineEdit(group);
+  tunIpAddressEdit_->setPlaceholderText("10.8.0.2");
+  tunIpAddressEdit_->setToolTip("IP address assigned to the TUN interface");
+  connect(tunIpAddressEdit_, &QLineEdit::textChanged, [this]() {
+    validateSettings();
+    hasUnsavedChanges_ = true;
+  });
+  layout->addWidget(tunIpAddressEdit_);
+
+  tunIpValidationLabel_ = new QLabel(group);
+  tunIpValidationLabel_->setStyleSheet(QString("color: %1; font-size: 12px;").arg(colors::dark::kAccentError));
+  tunIpValidationLabel_->hide();
+  layout->addWidget(tunIpValidationLabel_);
+
+  // Netmask
+  auto* netmaskLabel = new QLabel("Netmask", group);
+  netmaskLabel->setProperty("textStyle", "secondary");
+  layout->addWidget(netmaskLabel);
+
+  tunNetmaskEdit_ = new QLineEdit(group);
+  tunNetmaskEdit_->setPlaceholderText("255.255.255.0");
+  tunNetmaskEdit_->setToolTip("Subnet mask for the TUN interface");
+  connect(tunNetmaskEdit_, &QLineEdit::textChanged, [this]() {
+    validateSettings();
+    hasUnsavedChanges_ = true;
+  });
+  layout->addWidget(tunNetmaskEdit_);
+
+  tunNetmaskValidationLabel_ = new QLabel(group);
+  tunNetmaskValidationLabel_->setStyleSheet(QString("color: %1; font-size: 12px;").arg(colors::dark::kAccentError));
+  tunNetmaskValidationLabel_->hide();
+  layout->addWidget(tunNetmaskValidationLabel_);
+
+  // MTU
+  auto* mtuRow = new QHBoxLayout();
+  auto* mtuLabel = new QLabel("MTU", group);
+  mtuLabel->setProperty("textStyle", "secondary");
+  mtuLabel->setToolTip("Maximum Transmission Unit (576-65535)");
+  mtuRow->addWidget(mtuLabel);
+  mtuRow->addStretch();
+
+  tunMtuSpinBox_ = new QSpinBox(group);
+  tunMtuSpinBox_->setRange(576, 65535);
+  tunMtuSpinBox_->setValue(1400);
+  tunMtuSpinBox_->setSuffix(" bytes");
+  tunMtuSpinBox_->setFixedWidth(130);
+  tunMtuSpinBox_->setToolTip("Recommended: 1400 for most networks");
+  connect(tunMtuSpinBox_, QOverload<int>::of(&QSpinBox::valueChanged), [this]() {
+    hasUnsavedChanges_ = true;
+  });
+  mtuRow->addWidget(tunMtuSpinBox_);
+  layout->addLayout(mtuRow);
+
+  // Info text
+  auto* infoLabel = new QLabel(
+      "The TUN interface creates a virtual network device for VPN traffic.\n"
+      "Default values work for most configurations.",
+      group);
+  infoLabel->setWordWrap(true);
+  infoLabel->setStyleSheet(QString("color: %1; font-size: 12px; padding: 12px; "
+                                   "background: rgba(88, 166, 255, 0.08); "
+                                   "border: 1px solid rgba(88, 166, 255, 0.2); "
+                                   "border-radius: 10px;")
+                               .arg(colors::dark::kAccentPrimary));
+  layout->addWidget(infoLabel);
+
+  parent->layout()->addWidget(group);
+}
+
 void SettingsWidget::createAdvancedSection(QWidget* parent) {
   auto* group = new QGroupBox("Advanced", parent);
   auto* layout = new QVBoxLayout(group);
@@ -516,6 +609,30 @@ void SettingsWidget::validateSettings() {
     obfuscationSeedEdit_->setStyleSheet("");
   }
 
+  // Validate TUN IP address
+  QString tunIp = tunIpAddressEdit_->text().trimmed();
+  if (!tunIp.isEmpty() && !isValidIpAddress(tunIp)) {
+    tunIpValidationLabel_->setText("Invalid IP address format");
+    tunIpValidationLabel_->show();
+    tunIpAddressEdit_->setStyleSheet(QString("border-color: %1;").arg(colors::dark::kAccentError));
+    allValid = false;
+  } else {
+    tunIpValidationLabel_->hide();
+    tunIpAddressEdit_->setStyleSheet("");
+  }
+
+  // Validate TUN netmask
+  QString tunNetmask = tunNetmaskEdit_->text().trimmed();
+  if (!tunNetmask.isEmpty() && !isValidIpAddress(tunNetmask)) {
+    tunNetmaskValidationLabel_->setText("Invalid netmask format");
+    tunNetmaskValidationLabel_->show();
+    tunNetmaskEdit_->setStyleSheet(QString("border-color: %1;").arg(colors::dark::kAccentError));
+    allValid = false;
+  } else {
+    tunNetmaskValidationLabel_->hide();
+    tunNetmaskEdit_->setStyleSheet("");
+  }
+
   saveButton_->setEnabled(allValid);
 }
 
@@ -550,6 +667,12 @@ void SettingsWidget::loadSettings() {
   // Crypto Configuration
   keyFileEdit_->setText(settings.value("crypto/keyFile", "").toString());
   obfuscationSeedEdit_->setText(settings.value("crypto/obfuscationSeedFile", "").toString());
+
+  // TUN Interface Configuration
+  tunDeviceNameEdit_->setText(settings.value("tun/deviceName", "veil0").toString());
+  tunIpAddressEdit_->setText(settings.value("tun/ipAddress", "10.8.0.2").toString());
+  tunNetmaskEdit_->setText(settings.value("tun/netmask", "255.255.255.0").toString());
+  tunMtuSpinBox_->setValue(settings.value("tun/mtu", 1400).toInt());
 
   // Routing
   routeAllTrafficCheck_->setChecked(settings.value("routing/routeAllTraffic", true).toBool());
@@ -593,6 +716,12 @@ void SettingsWidget::saveSettings() {
   // Crypto Configuration
   settings.setValue("crypto/keyFile", keyFileEdit_->text().trimmed());
   settings.setValue("crypto/obfuscationSeedFile", obfuscationSeedEdit_->text().trimmed());
+
+  // TUN Interface Configuration
+  settings.setValue("tun/deviceName", tunDeviceNameEdit_->text().trimmed());
+  settings.setValue("tun/ipAddress", tunIpAddressEdit_->text().trimmed());
+  settings.setValue("tun/netmask", tunNetmaskEdit_->text().trimmed());
+  settings.setValue("tun/mtu", tunMtuSpinBox_->value());
 
   // Routing
   settings.setValue("routing/routeAllTraffic", routeAllTrafficCheck_->isChecked());

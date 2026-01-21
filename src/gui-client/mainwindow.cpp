@@ -5,6 +5,8 @@
 #include <QVBoxLayout>
 #include <QApplication>
 #include <QIcon>
+#include <QMessageBox>
+#include <QShortcut>
 
 #include "common/gui/theme.h"
 #include "connection_widget.h"
@@ -20,10 +22,15 @@ MainWindow::MainWindow(QWidget* parent)
       connectionWidget_(new ConnectionWidget(this)),
       settingsWidget_(new SettingsWidget(this)),
       diagnosticsWidget_(new DiagnosticsWidget(this)),
-      ipcManager_(std::make_unique<IpcClientManager>()) {
+      ipcManager_(std::make_unique<IpcClientManager>()),
+      trayIcon_(nullptr),
+      trayMenu_(nullptr),
+      trayConnectAction_(nullptr),
+      trayDisconnectAction_(nullptr) {
   setupUi();
   setupMenuBar();
   setupStatusBar();
+  setupSystemTray();
   applyDarkTheme();
 
   // Connect to daemon
@@ -100,14 +107,53 @@ void MainWindow::setupMenuBar() {
   )");
 
   auto* viewMenu = menuBar()->addMenu(tr("&View"));
-  viewMenu->addAction(tr("&Connection"), this, &MainWindow::showConnectionView);
-  viewMenu->addAction(tr("&Settings"), this, &MainWindow::showSettingsView);
-  viewMenu->addAction(tr("&Diagnostics"), this, &MainWindow::showDiagnosticsView);
+
+  auto* connectionAction = viewMenu->addAction(tr("&Connection"));
+  connectionAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
+  connect(connectionAction, &QAction::triggered, this, &MainWindow::showConnectionView);
+
+  auto* settingsViewAction = viewMenu->addAction(tr("&Settings"));
+  settingsViewAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_2));
+  connect(settingsViewAction, &QAction::triggered, this, &MainWindow::showSettingsView);
+
+  auto* diagnosticsAction = viewMenu->addAction(tr("&Diagnostics"));
+  diagnosticsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_3));
+  connect(diagnosticsAction, &QAction::triggered, this, &MainWindow::showDiagnosticsView);
+
+  viewMenu->addSeparator();
+
+  auto* minimizeAction = viewMenu->addAction(tr("&Minimize to Tray"));
+  minimizeAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_M));
+  connect(minimizeAction, &QAction::triggered, this, [this]() {
+    if (trayIcon_ && trayIcon_->isVisible()) {
+      hide();
+    }
+  });
 
   auto* helpMenu = menuBar()->addMenu(tr("&Help"));
-  helpMenu->addAction(tr("&About VEIL"), this, &MainWindow::showAboutDialog);
+  auto* aboutAction = helpMenu->addAction(tr("&About VEIL"));
+  aboutAction->setShortcut(QKeySequence(Qt::Key_F1));
+  connect(aboutAction, &QAction::triggered, this, &MainWindow::showAboutDialog);
+
   helpMenu->addAction(tr("Check for &Updates"), []() {
     // TODO: Implement update check
+  });
+
+  // Global shortcuts for quick connect/disconnect
+  auto* quickConnectShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return), this);
+  connect(quickConnectShortcut, &QShortcut::activated, this, [this]() {
+    if (currentTrayState_ == TrayConnectionState::kDisconnected ||
+        currentTrayState_ == TrayConnectionState::kError) {
+      onQuickConnect();
+    }
+  });
+
+  auto* quickDisconnectShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_D), this);
+  connect(quickDisconnectShortcut, &QShortcut::activated, this, [this]() {
+    if (currentTrayState_ == TrayConnectionState::kConnected ||
+        currentTrayState_ == TrayConnectionState::kConnecting) {
+      onQuickDisconnect();
+    }
   });
 }
 
@@ -243,6 +289,202 @@ void MainWindow::showAboutDialog() {
 
   dialog->exec();
   dialog->deleteLater();
+}
+
+void MainWindow::setupSystemTray() {
+  // Check if system tray is available
+  if (!QSystemTrayIcon::isSystemTrayAvailable()) {
+    minimizeToTray_ = false;
+    return;
+  }
+
+  // Create tray icon
+  trayIcon_ = new QSystemTrayIcon(this);
+  trayIcon_->setIcon(QIcon(":/icons/icon_disconnected.svg"));
+  trayIcon_->setToolTip("VEIL VPN - Disconnected");
+
+  // Create tray menu
+  trayMenu_ = new QMenu(this);
+  trayMenu_->setStyleSheet(R"(
+    QMenu {
+      background-color: #161b22;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 8px;
+    }
+    QMenu::item {
+      padding: 10px 24px;
+      border-radius: 6px;
+      color: #f0f6fc;
+    }
+    QMenu::item:selected {
+      background-color: #238636;
+    }
+    QMenu::separator {
+      height: 1px;
+      background-color: rgba(255, 255, 255, 0.08);
+      margin: 8px 12px;
+    }
+  )");
+
+  // Status label (non-clickable)
+  auto* statusAction = trayMenu_->addAction("Not Connected");
+  statusAction->setEnabled(false);
+
+  trayMenu_->addSeparator();
+
+  // Connect/Disconnect actions
+  trayConnectAction_ = trayMenu_->addAction(tr("Connect"));
+  connect(trayConnectAction_, &QAction::triggered, this, &MainWindow::onQuickConnect);
+
+  trayDisconnectAction_ = trayMenu_->addAction(tr("Disconnect"));
+  trayDisconnectAction_->setEnabled(false);
+  connect(trayDisconnectAction_, &QAction::triggered, this, &MainWindow::onQuickDisconnect);
+
+  trayMenu_->addSeparator();
+
+  // Show window action
+  auto* showAction = trayMenu_->addAction(tr("Show Window"));
+  connect(showAction, &QAction::triggered, this, [this]() {
+    show();
+    raise();
+    activateWindow();
+  });
+
+  // Settings action
+  auto* settingsAction = trayMenu_->addAction(tr("Settings"));
+  connect(settingsAction, &QAction::triggered, this, [this]() {
+    show();
+    raise();
+    activateWindow();
+    showSettingsView();
+  });
+
+  trayMenu_->addSeparator();
+
+  // Quit action
+  auto* quitAction = trayMenu_->addAction(tr("Quit"));
+  connect(quitAction, &QAction::triggered, qApp, &QApplication::quit);
+
+  trayIcon_->setContextMenu(trayMenu_);
+
+  // Connect activation signal
+  connect(trayIcon_, &QSystemTrayIcon::activated,
+          this, &MainWindow::onTrayIconActivated);
+
+  // Show tray icon
+  trayIcon_->show();
+}
+
+void MainWindow::onTrayIconActivated(QSystemTrayIcon::ActivationReason reason) {
+  switch (reason) {
+    case QSystemTrayIcon::Trigger:
+    case QSystemTrayIcon::DoubleClick:
+      // Show/hide window on click
+      if (isVisible()) {
+        hide();
+      } else {
+        show();
+        raise();
+        activateWindow();
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+void MainWindow::onQuickConnect() {
+  // Delegate to connection widget
+  connectionWidget_->onConnectClicked();
+  updateTrayIcon(TrayConnectionState::kConnecting);
+}
+
+void MainWindow::onQuickDisconnect() {
+  // Delegate to connection widget
+  connectionWidget_->onConnectClicked();  // Toggle disconnect
+  updateTrayIcon(TrayConnectionState::kDisconnected);
+}
+
+void MainWindow::updateTrayIcon(TrayConnectionState state) {
+  if (!trayIcon_) return;
+
+  currentTrayState_ = state;
+  QString iconPath;
+  QString tooltip;
+  bool connectEnabled = true;
+  bool disconnectEnabled = false;
+
+  switch (state) {
+    case TrayConnectionState::kDisconnected:
+      iconPath = ":/icons/icon_disconnected.svg";
+      tooltip = "VEIL VPN - Disconnected";
+      connectEnabled = true;
+      disconnectEnabled = false;
+      break;
+    case TrayConnectionState::kConnecting:
+      iconPath = ":/icons/icon_connecting.svg";
+      tooltip = "VEIL VPN - Connecting...";
+      connectEnabled = false;
+      disconnectEnabled = true;
+      break;
+    case TrayConnectionState::kConnected:
+      iconPath = ":/icons/icon_connected.svg";
+      tooltip = "VEIL VPN - Connected";
+      connectEnabled = false;
+      disconnectEnabled = true;
+      break;
+    case TrayConnectionState::kError:
+      iconPath = ":/icons/icon_error.svg";
+      tooltip = "VEIL VPN - Connection Error";
+      connectEnabled = true;
+      disconnectEnabled = false;
+      break;
+  }
+
+  trayIcon_->setIcon(QIcon(iconPath));
+  trayIcon_->setToolTip(tooltip);
+
+  if (trayConnectAction_) {
+    trayConnectAction_->setEnabled(connectEnabled);
+  }
+  if (trayDisconnectAction_) {
+    trayDisconnectAction_->setEnabled(disconnectEnabled);
+  }
+
+  // Update the status label in the menu
+  if (trayMenu_ && !trayMenu_->actions().isEmpty()) {
+    auto* statusAction = trayMenu_->actions().first();
+    switch (state) {
+      case TrayConnectionState::kDisconnected:
+        statusAction->setText("Not Connected");
+        break;
+      case TrayConnectionState::kConnecting:
+        statusAction->setText("Connecting...");
+        break;
+      case TrayConnectionState::kConnected:
+        statusAction->setText("Connected");
+        break;
+      case TrayConnectionState::kError:
+        statusAction->setText("Connection Error");
+        break;
+    }
+  }
+}
+
+void MainWindow::closeEvent(QCloseEvent* event) {
+  if (minimizeToTray_ && trayIcon_ && trayIcon_->isVisible()) {
+    // Minimize to tray instead of closing
+    hide();
+    trayIcon_->showMessage(
+        "VEIL VPN",
+        "Application minimized to system tray. Click the icon to restore.",
+        QSystemTrayIcon::Information,
+        2000);
+    event->ignore();
+  } else {
+    event->accept();
+  }
 }
 
 }  // namespace veil::gui
