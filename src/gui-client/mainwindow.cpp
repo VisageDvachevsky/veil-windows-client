@@ -146,6 +146,10 @@ void MainWindow::setupUi() {
           this, &MainWindow::showConnectionView);
   connect(diagnosticsWidget_, &DiagnosticsWidget::backRequested,
           this, &MainWindow::showConnectionView);
+
+  // Update connection widget when settings are saved
+  connect(settingsWidget_, &SettingsWidget::settingsSaved,
+          connectionWidget_, &ConnectionWidget::loadServerSettings);
 }
 
 void MainWindow::setupMenuBar() {

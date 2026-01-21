@@ -8,6 +8,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QGraphicsDropShadowEffect>
+#include <QSettings>
 
 #include "common/gui/theme.h"
 
@@ -157,7 +158,7 @@ class StatusRing : public QWidget {
 ConnectionWidget::ConnectionWidget(QWidget* parent) : QWidget(parent) {
   setupUi();
   setupAnimations();
-  setServerAddress("vpn.example.com", 4433);
+  loadServerSettings();
 }
 
 void ConnectionWidget::setupUi() {
@@ -738,6 +739,13 @@ QString ConnectionWidget::getStatusText() const {
       return "Connection Failed";
   }
   return "Unknown";
+}
+
+void ConnectionWidget::loadServerSettings() {
+  QSettings settings("VEIL", "VPN Client");
+  QString serverAddress = settings.value("server/address", "vpn.example.com").toString();
+  uint16_t serverPort = static_cast<uint16_t>(settings.value("server/port", 4433).toInt());
+  setServerAddress(serverAddress, serverPort);
 }
 
 }  // namespace veil::gui

@@ -176,7 +176,7 @@ void EventLoop::run() {
 
   // Bind thread checker to the current thread (the event loop thread).
   // All subsequent operations on this EventLoop must happen on this thread.
-  thread_checker_.rebind_to_current();
+  VEIL_THREAD_REBIND(thread_checker_);
 
   running_.store(true);
   LOG_INFO("Event loop started");

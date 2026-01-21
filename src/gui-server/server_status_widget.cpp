@@ -356,7 +356,7 @@ void ServerStatusWidget::updateUptime() {
 void ServerStatusWidget::updatePulseAnimation() {
   pulsePhase_ += 0.1f;
   float opacity = 0.5f + 0.5f * std::sin(pulsePhase_);
-  indicatorOpacity_->setOpacity(opacity);
+  indicatorOpacity_->setOpacity(static_cast<qreal>(opacity));
 }
 
 void ServerStatusWidget::simulateDemoData() {

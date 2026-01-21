@@ -6,7 +6,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <ranges>
 #include <sstream>
 #include <system_error>
 
@@ -401,9 +400,10 @@ bool RouteManager::save_routes(std::error_code& ec) {
 
 bool RouteManager::restore_routes(std::error_code& ec) {
   // Remove added routes in reverse order.
-  for (auto& route : std::ranges::reverse_view(added_routes_)) {
+  // NOLINTNEXTLINE(modernize-loop-convert) - std::ranges::reverse_view has compatibility issues with clang
+  for (auto it = added_routes_.rbegin(); it != added_routes_.rend(); ++it) {
     std::error_code ignored;
-    remove_route(route, ignored);
+    remove_route(*it, ignored);
   }
   added_routes_.clear();
 
