@@ -283,7 +283,7 @@ void ClientListWidget::onSearchTextChanged(const QString& text) {
     bool match = false;
     for (int col = 0; col < tableWidget_->columnCount(); ++col) {
       QTableWidgetItem* item = tableWidget_->item(row, col);
-      if (item && item->text().toLower().contains(searchText)) {
+      if ((item != nullptr) && item->text().toLower().contains(searchText)) {
         match = true;
         break;
       }
@@ -294,7 +294,7 @@ void ClientListWidget::onSearchTextChanged(const QString& text) {
 
 void ClientListWidget::onTableContextMenu(const QPoint& pos) {
   QTableWidgetItem* item = tableWidget_->itemAt(pos);
-  if (item) {
+  if (item != nullptr) {
     tableWidget_->selectRow(item->row());
     contextMenu_->popup(tableWidget_->viewport()->mapToGlobal(pos));
   }
@@ -304,7 +304,7 @@ void ClientListWidget::onDisconnectClient() {
   int row = tableWidget_->currentRow();
   if (row >= 0) {
     QTableWidgetItem* item = tableWidget_->item(row, 0);
-    if (item) {
+    if (item != nullptr) {
       QString sessionId = item->text();
       emit clientDisconnectRequested(sessionId);
 
@@ -324,14 +324,14 @@ void ClientListWidget::onViewClientDetails() {
   int row = tableWidget_->currentRow();
   if (row >= 0) {
     QTableWidgetItem* item = tableWidget_->item(row, 0);
-    if (item) {
+    if (item != nullptr) {
       emit clientDetailsRequested(item->text());
 
       // Demo: show message box with details
       QString details;
       for (int col = 0; col < tableWidget_->columnCount(); ++col) {
         QTableWidgetItem* colItem = tableWidget_->item(row, col);
-        if (colItem) {
+        if (colItem != nullptr) {
           details += tableWidget_->horizontalHeaderItem(col)->text() + ": " +
                      colItem->text() + "\n";
         }
@@ -424,7 +424,7 @@ void ClientListWidget::updateClientRow(int row, const ClientInfo& client) {
 int ClientListWidget::findClientRow(const QString& sessionId) const {
   for (int row = 0; row < tableWidget_->rowCount(); ++row) {
     QTableWidgetItem* item = tableWidget_->item(row, 0);
-    if (item && item->text() == sessionId) {
+    if ((item != nullptr) && item->text() == sessionId) {
       return row;
     }
   }
