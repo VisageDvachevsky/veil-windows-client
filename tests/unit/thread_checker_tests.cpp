@@ -125,7 +125,10 @@ TEST_F(ThreadCheckerTest, MacrosCompile) {
   {
     VEIL_DCHECK_THREAD_SCOPE(checker);
     // Do some work here
+#ifndef NDEBUG
+    // In debug builds, checker is a real variable; verify it works
     (void)checker.is_owner_thread();
+#endif
   }
 }
 
