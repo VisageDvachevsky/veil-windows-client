@@ -1,0 +1,215 @@
+name: Windows Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+      - '.clang-tidy'
+      - '.github/workflows/windows-build.yml'
+
+jobs:
+  build-windows:
+    name: Build Windows (${{ matrix.arch }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64]
+        include:
+          - arch: x64
+            cmake_arch: x64
+            qt_arch: win64_msvc2019_64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.6.*'
+          host: 'windows'
+          target: 'desktop'
+          arch: ${{ matrix.qt_arch }}
+          modules: 'qtnetworkauth'
+          cache: true
+
+      - name: Install Ninja
+        run: choco install ninja -y
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/vcpkg
+            !${{ github.workspace }}/vcpkg/buildtrees
+            !${{ github.workspace }}/vcpkg/packages
+            !${{ github.workspace }}/vcpkg/downloads
+          key: vcpkg-windows-${{ matrix.arch }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-windows-${{ matrix.arch }}-
+
+      - name: Setup vcpkg
+        run: |
+          if (!(Test-Path vcpkg)) {
+            git clone https://github.com/microsoft/vcpkg.git
+            ./vcpkg/bootstrap-vcpkg.bat
+          }
+          echo "${{ github.workspace }}/vcpkg" >> $env:GITHUB_PATH
+
+      - name: Install dependencies via vcpkg
+        run: |
+          ./vcpkg/vcpkg install libsodium:${{ matrix.arch }}-windows
+          ./vcpkg/vcpkg install spdlog:${{ matrix.arch }}-windows
+          ./vcpkg/vcpkg install fmt:${{ matrix.arch }}-windows
+          ./vcpkg/vcpkg install cli11:${{ matrix.arch }}-windows
+          ./vcpkg/vcpkg install nlohmann-json:${{ matrix.arch }}-windows
+          ./vcpkg/vcpkg install gtest:${{ matrix.arch }}-windows
+
+      - name: Download Wintun
+        run: |
+          $wintunUrl = "https://www.wintun.net/builds/wintun-0.14.1.zip"
+          $wintunZip = "${{ github.workspace }}/wintun.zip"
+          $wintunDir = "${{ github.workspace }}/wintun"
+
+          Invoke-WebRequest -Uri $wintunUrl -OutFile $wintunZip
+          Expand-Archive -Path $wintunZip -DestinationPath $wintunDir -Force
+
+          # Copy wintun.dll to a location where it can be found
+          New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/driver"
+          Copy-Item "$wintunDir/wintun/bin/amd64/wintun.dll" "${{ github.workspace }}/driver/"
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.arch }}-windows `
+            -DVEIL_BUILD_TESTS=OFF `
+            -DVEIL_BUILD_GUI=ON `
+            -DVEIL_BUILD_SERVER=OFF `
+            -DVEIL_VERSION_MAJOR=1 `
+            -DVEIL_VERSION_MINOR=0 `
+            -DVEIL_VERSION_PATCH=0
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Run unit tests
+        run: |
+          cd build
+          ctest -C Release --output-on-failure --timeout 120 -E "integration|network"
+
+      - name: Prepare artifacts
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/bin
+
+          # Copy executables
+          Copy-Item build/src/veil-client.exe artifacts/bin/ -ErrorAction SilentlyContinue
+          Copy-Item build/src/veil-service.exe artifacts/bin/ -ErrorAction SilentlyContinue
+          Copy-Item build/src/gui-client/veil-client-gui.exe artifacts/bin/ -ErrorAction SilentlyContinue
+
+          # Copy Wintun driver
+          New-Item -ItemType Directory -Force -Path artifacts/driver
+          Copy-Item driver/wintun.dll artifacts/driver/
+
+          # Copy Qt dependencies
+          if (Test-Path "build/src/gui-client/veil-client-gui.exe") {
+            windeployqt --no-translations --no-opengl-sw artifacts/bin/veil-client-gui.exe
+          }
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: veil-vpn-windows-${{ matrix.arch }}
+          path: artifacts/
+          retention-days: 7
+
+  create-installer:
+    name: Create Windows Installer
+    runs-on: windows-latest
+    needs: build-windows
+    # Create installer on both push to main and pull requests for testing
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: veil-vpn-windows-x64
+          path: installer/
+
+      - name: Install NSIS
+        run: |
+          # Retry choco install up to 3 times with exponential backoff
+          $maxRetries = 3
+          $retryCount = 0
+          $success = $false
+
+          while (-not $success -and $retryCount -lt $maxRetries) {
+            try {
+              choco install nsis -y --no-progress
+              $success = $true
+            } catch {
+              $retryCount++
+              if ($retryCount -lt $maxRetries) {
+                $waitTime = [math]::Pow(2, $retryCount) * 5
+                Write-Host "NSIS installation failed. Retrying in $waitTime seconds..."
+                Start-Sleep -Seconds $waitTime
+              } else {
+                throw "Failed to install NSIS after $maxRetries attempts"
+              }
+            }
+          }
+
+      - name: Build installer
+        run: |
+          cd installer
+          # Prepare directory structure
+          New-Item -ItemType Directory -Force -Path docs
+          Copy-Item ../README.md docs/ -ErrorAction SilentlyContinue
+
+          # Build the installer (use full path as choco doesn't update PATH in same session)
+          & 'C:\Program Files (x86)\NSIS\makensis.exe' veil-vpn.nsi
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: veil-vpn-installer
+          path: installer/*.exe
+          retention-days: 14
+          if-no-files-found: error
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build-windows, create-installer]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release-artifacts/veil-vpn-installer/*.exe
+            release-artifacts/veil-vpn-windows-x64/**
+          draft: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

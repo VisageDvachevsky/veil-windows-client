@@ -1,0 +1,26 @@
+[Unit]
+Description=VEIL VPN Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/veil-server --config /etc/veil/server.conf
+Restart=on-failure
+RestartSec=5
+User=root
+Group=root
+
+# Security hardening
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/run /var/log /var/log/veil
+NoNewPrivileges=true
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=512
+
+[Install]
+WantedBy=multi-user.target

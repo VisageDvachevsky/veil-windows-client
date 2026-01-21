@@ -1,0 +1,82 @@
+#pragma once
+
+#include <QWidget>
+#include <QLineEdit>
+#include <QSpinBox>
+#include <QCheckBox>
+#include <QComboBox>
+#include <QLabel>
+#include <QPushButton>
+#include <QScrollArea>
+#include <QTimer>
+
+namespace veil::gui {
+
+/// Settings widget for configuring VEIL VPN client options
+class SettingsWidget : public QWidget {
+  Q_OBJECT
+
+ public:
+  explicit SettingsWidget(QWidget* parent = nullptr);
+
+ signals:
+  void backRequested();
+  void settingsSaved();
+
+ public slots:
+  /// Load settings from config file
+  void loadSettings();
+
+  /// Save current settings
+  void saveSettings();
+
+ private slots:
+  void onServerAddressChanged();
+  void onPortChanged();
+  void onDpiModeChanged(int index);
+  void validateSettings();
+
+ private:
+  void setupUi();
+  void createServerSection(QWidget* parent);
+  void createRoutingSection(QWidget* parent);
+  void createConnectionSection(QWidget* parent);
+  void createDpiBypassSection(QWidget* parent);
+  void createAdvancedSection(QWidget* parent);
+
+  bool isValidHostname(const QString& hostname) const;
+  bool isValidIpAddress(const QString& ip) const;
+
+  // Server Configuration
+  QLineEdit* serverAddressEdit_;
+  QSpinBox* portSpinBox_;
+  QLabel* serverValidationLabel_;
+
+  // Routing
+  QCheckBox* routeAllTrafficCheck_;
+  QCheckBox* splitTunnelCheck_;
+  QLineEdit* customRoutesEdit_;
+
+  // Connection
+  QCheckBox* autoReconnectCheck_;
+  QSpinBox* reconnectIntervalSpinBox_;
+  QSpinBox* maxReconnectAttemptsSpinBox_;
+
+  // DPI Bypass
+  QComboBox* dpiModeCombo_;
+  QLabel* dpiDescLabel_;
+
+  // Advanced
+  QCheckBox* obfuscationCheck_;
+  QCheckBox* verboseLoggingCheck_;
+  QCheckBox* developerModeCheck_;
+
+  // Buttons
+  QPushButton* saveButton_;
+  QPushButton* resetButton_;
+
+  // State
+  bool hasUnsavedChanges_{false};
+};
+
+}  // namespace veil::gui
