@@ -45,8 +45,10 @@ class ConnectionWidget : public QWidget {
   /// Set error message when in error state
   void setErrorMessage(const QString& message);
 
- private slots:
+  /// Handle connect button click (toggle connect/disconnect)
   void onConnectClicked();
+
+ private slots:
   void onPulseAnimation();
   void onUptimeUpdate();
 

@@ -30,27 +30,46 @@ class SettingsWidget : public QWidget {
   /// Save current settings
   void saveSettings();
 
+  /// Get current settings values
+  QString serverAddress() const;
+  uint16_t serverPort() const;
+  QString keyFilePath() const;
+  QString obfuscationSeedPath() const;
+
  private slots:
   void onServerAddressChanged();
   void onPortChanged();
   void onDpiModeChanged(int index);
+  void onBrowseKeyFile();
+  void onBrowseObfuscationSeed();
   void validateSettings();
 
  private:
   void setupUi();
   void createServerSection(QWidget* parent);
+  void createCryptoSection(QWidget* parent);
   void createRoutingSection(QWidget* parent);
   void createConnectionSection(QWidget* parent);
   void createDpiBypassSection(QWidget* parent);
+  void createTunInterfaceSection(QWidget* parent);
   void createAdvancedSection(QWidget* parent);
 
   bool isValidHostname(const QString& hostname) const;
   bool isValidIpAddress(const QString& ip) const;
+  bool isValidFilePath(const QString& path) const;
 
   // Server Configuration
   QLineEdit* serverAddressEdit_;
   QSpinBox* portSpinBox_;
   QLabel* serverValidationLabel_;
+
+  // Crypto Configuration
+  QLineEdit* keyFileEdit_;
+  QPushButton* browseKeyFileButton_;
+  QLabel* keyFileValidationLabel_;
+  QLineEdit* obfuscationSeedEdit_;
+  QPushButton* browseObfuscationSeedButton_;
+  QLabel* obfuscationSeedValidationLabel_;
 
   // Routing
   QCheckBox* routeAllTrafficCheck_;
@@ -65,6 +84,14 @@ class SettingsWidget : public QWidget {
   // DPI Bypass
   QComboBox* dpiModeCombo_;
   QLabel* dpiDescLabel_;
+
+  // TUN Interface
+  QLineEdit* tunDeviceNameEdit_;
+  QLineEdit* tunIpAddressEdit_;
+  QLineEdit* tunNetmaskEdit_;
+  QSpinBox* tunMtuSpinBox_;
+  QLabel* tunIpValidationLabel_;
+  QLabel* tunNetmaskValidationLabel_;
 
   // Advanced
   QCheckBox* obfuscationCheck_;
