@@ -48,6 +48,9 @@ class ConnectionWidget : public QWidget {
   /// Handle connect button click (toggle connect/disconnect)
   void onConnectClicked();
 
+  /// Load server settings from QSettings and update display
+  void loadServerSettings();
+
  private slots:
   void onPulseAnimation();
   void onUptimeUpdate();
