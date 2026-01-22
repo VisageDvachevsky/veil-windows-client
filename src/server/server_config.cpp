@@ -11,6 +11,7 @@
 #include <CLI/CLI.hpp>
 
 #include "common/logging/logger.h"
+#include "tun/routing.h"
 
 namespace veil::server {
 
@@ -375,8 +376,45 @@ bool validate_config(const ServerConfig& config, std::string& error) {
 
   // Validate NAT external interface is not empty if NAT is enabled
   if (config.nat.enable_forwarding && config.nat.external_interface.empty()) {
-    error = "NAT external interface is required when NAT is enabled";
+    error = "NAT external interface is required when NAT is enabled. "
+            "Use --external-interface to specify it, or enable auto-detection.";
     return false;
+  }
+
+  return true;
+}
+
+bool finalize_config(ServerConfig& config, std::error_code& ec) {
+  // Auto-detect external interface if using default "eth0" or empty
+  // and NAT is enabled.
+  if (config.nat.enable_forwarding) {
+    // Check if the interface exists, and if not, try to auto-detect.
+    bool need_detection = config.nat.external_interface.empty() ||
+                          config.nat.external_interface == "eth0";
+
+    if (need_detection) {
+      auto detected = tun::detect_external_interface(ec);
+      if (detected) {
+        // Only replace if we detected something different or if it was empty.
+        if (config.nat.external_interface.empty() ||
+            (config.nat.external_interface == "eth0" && *detected != "eth0")) {
+          LOG_INFO("Auto-detected external interface: {} (was: {})", *detected,
+                   config.nat.external_interface.empty() ? "(empty)"
+                                                         : config.nat.external_interface);
+          config.nat.external_interface = *detected;
+        }
+      } else if (config.nat.external_interface.empty()) {
+        // Detection failed and no fallback specified.
+        LOG_ERROR("Failed to auto-detect external interface for NAT. "
+                  "Please specify --external-interface explicitly.");
+        return false;
+      } else {
+        // Detection failed but we have a fallback (eth0), log a warning.
+        LOG_WARN("Could not auto-detect external interface; using default '{}'. "
+                 "If NAT doesn't work, specify --external-interface explicitly.",
+                 config.nat.external_interface);
+      }
+    }
   }
 
   return true;
