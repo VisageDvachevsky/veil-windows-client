@@ -160,38 +160,7 @@ jobs:
           path: installer/
 
       - name: Install NSIS
-        run: |
-          # Use GitHub releases for reliable NSIS download
-          $nsisVersion = "3.10"
-          $nsisUrl = "https://github.com/NSIS-Dev/nsis-build/releases/download/v$nsisVersion/nsis-$nsisVersion-setup.exe"
-          $nsisInstaller = "$env:TEMP\nsis-setup.exe"
-
-          Write-Host "Downloading NSIS $nsisVersion from GitHub..."
-          try {
-            Invoke-WebRequest -Uri $nsisUrl -OutFile $nsisInstaller -UseBasicParsing -MaximumRedirection 5
-          } catch {
-            # Fallback to SourceForge with explicit redirect handling
-            Write-Host "GitHub download failed, trying SourceForge..."
-            $sfUrl = "https://sourceforge.net/projects/nsis/files/NSIS%203/$nsisVersion/nsis-$nsisVersion-setup.exe/download"
-            Invoke-WebRequest -Uri $sfUrl -OutFile $nsisInstaller -UseBasicParsing -MaximumRedirection 10
-          }
-
-          # Verify downloaded file
-          if (-not (Test-Path $nsisInstaller) -or (Get-Item $nsisInstaller).Length -lt 1MB) {
-            throw "NSIS installer download failed or file is too small"
-          }
-
-          Write-Host "Installing NSIS silently..."
-          Start-Process -FilePath $nsisInstaller -ArgumentList "/S" -Wait -NoNewWindow
-
-          # Verify installation
-          $nsisPath = "C:\Program Files (x86)\NSIS\makensis.exe"
-          if (Test-Path $nsisPath) {
-            Write-Host "NSIS installed successfully at $nsisPath"
-            & $nsisPath /VERSION
-          } else {
-            throw "NSIS installation failed - makensis.exe not found at $nsisPath"
-          }
+        uses: joncloud/makensis-action@v4.2
 
       - name: Build installer
         run: |
@@ -200,8 +169,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path docs
           Copy-Item ../README.md docs/ -ErrorAction SilentlyContinue
 
-          # Build the installer (use full path as choco doesn't update PATH in same session)
-          & 'C:\Program Files (x86)\NSIS\makensis.exe' veil-vpn.nsi
+          # Build the installer (makensis is now in PATH thanks to the action)
+          makensis veil-vpn.nsi
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
