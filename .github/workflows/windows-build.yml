@@ -160,27 +160,9 @@ jobs:
           path: installer/
 
       - name: Install NSIS
-        run: |
-          # Retry choco install up to 3 times with exponential backoff
-          $maxRetries = 3
-          $retryCount = 0
-          $success = $false
-
-          while (-not $success -and $retryCount -lt $maxRetries) {
-            try {
-              choco install nsis -y --no-progress
-              $success = $true
-            } catch {
-              $retryCount++
-              if ($retryCount -lt $maxRetries) {
-                $waitTime = [math]::Pow(2, $retryCount) * 5
-                Write-Host "NSIS installation failed. Retrying in $waitTime seconds..."
-                Start-Sleep -Seconds $waitTime
-              } else {
-                throw "Failed to install NSIS after $maxRetries attempts"
-              }
-            }
-          }
+        uses: repolevedavaj/install-nsis@v1.1.0
+        with:
+          nsis-version: '3.10'
 
       - name: Build installer
         run: |
@@ -189,8 +171,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path docs
           Copy-Item ../README.md docs/ -ErrorAction SilentlyContinue
 
-          # Build the installer (use full path as choco doesn't update PATH in same session)
-          & 'C:\Program Files (x86)\NSIS\makensis.exe' veil-vpn.nsi
+          # Build the installer (makensis is now in PATH thanks to the action)
+          makensis veil-vpn.nsi
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
