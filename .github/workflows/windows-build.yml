@@ -161,13 +161,25 @@ jobs:
 
       - name: Install NSIS
         run: |
-          # Download NSIS directly from SourceForge to avoid chocolatey timeouts
+          # Use GitHub releases for reliable NSIS download
           $nsisVersion = "3.10"
-          $nsisUrl = "https://downloads.sourceforge.net/project/nsis/NSIS%203/$nsisVersion/nsis-$nsisVersion-setup.exe"
+          $nsisUrl = "https://github.com/NSIS-Dev/nsis-build/releases/download/v$nsisVersion/nsis-$nsisVersion-setup.exe"
           $nsisInstaller = "$env:TEMP\nsis-setup.exe"
 
-          Write-Host "Downloading NSIS from SourceForge..."
-          Invoke-WebRequest -Uri $nsisUrl -OutFile $nsisInstaller -UseBasicParsing
+          Write-Host "Downloading NSIS $nsisVersion from GitHub..."
+          try {
+            Invoke-WebRequest -Uri $nsisUrl -OutFile $nsisInstaller -UseBasicParsing -MaximumRedirection 5
+          } catch {
+            # Fallback to SourceForge with explicit redirect handling
+            Write-Host "GitHub download failed, trying SourceForge..."
+            $sfUrl = "https://sourceforge.net/projects/nsis/files/NSIS%203/$nsisVersion/nsis-$nsisVersion-setup.exe/download"
+            Invoke-WebRequest -Uri $sfUrl -OutFile $nsisInstaller -UseBasicParsing -MaximumRedirection 10
+          }
+
+          # Verify downloaded file
+          if (-not (Test-Path $nsisInstaller) -or (Get-Item $nsisInstaller).Length -lt 1MB) {
+            throw "NSIS installer download failed or file is too small"
+          }
 
           Write-Host "Installing NSIS silently..."
           Start-Process -FilePath $nsisInstaller -ArgumentList "/S" -Wait -NoNewWindow
