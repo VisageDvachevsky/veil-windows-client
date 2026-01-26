@@ -438,28 +438,44 @@ json serialize_event(const Event& evt) {
 json serialize_response(const Response& resp) {
   json payload;
 
+  #ifdef VEIL_IPC_DEBUG
+  std::cerr << "[IPC Debug] serialize_response: resp.index=" << resp.index() << std::endl;
+  #endif
+
   std::visit([&payload](const auto& r) {
     using T = std::decay_t<decltype(r)>;
 
     if constexpr (std::is_same_v<T, StatusResponse>) {
+      #ifdef VEIL_IPC_DEBUG
+      std::cerr << "[IPC Debug] Serializing StatusResponse" << std::endl;
+      #endif
       payload["response_type"] = "status";
       json status_json;
       to_json(status_json, r.status);
       payload["status"] = status_json;
     }
     else if constexpr (std::is_same_v<T, MetricsResponse>) {
+      #ifdef VEIL_IPC_DEBUG
+      std::cerr << "[IPC Debug] Serializing MetricsResponse" << std::endl;
+      #endif
       payload["response_type"] = "metrics";
       json metrics_json;
       to_json(metrics_json, r.metrics);
       payload["metrics"] = metrics_json;
     }
     else if constexpr (std::is_same_v<T, DiagnosticsResponse>) {
+      #ifdef VEIL_IPC_DEBUG
+      std::cerr << "[IPC Debug] Serializing DiagnosticsResponse" << std::endl;
+      #endif
       payload["response_type"] = "diagnostics";
       json diag_json;
       to_json(diag_json, r.diagnostics);
       payload["diagnostics"] = diag_json;
     }
     else if constexpr (std::is_same_v<T, ClientListResponse>) {
+      #ifdef VEIL_IPC_DEBUG
+      std::cerr << "[IPC Debug] Serializing ClientListResponse" << std::endl;
+      #endif
       payload["response_type"] = "client_list";
       payload["clients"] = json::array();
       for (const auto& client : r.clients) {
@@ -469,15 +485,25 @@ json serialize_response(const Response& resp) {
       }
     }
     else if constexpr (std::is_same_v<T, SuccessResponse>) {
+      #ifdef VEIL_IPC_DEBUG
+      std::cerr << "[IPC Debug] Serializing SuccessResponse: message=" << r.message << std::endl;
+      #endif
       payload["response_type"] = "success";
       payload["message"] = r.message;
     }
     else if constexpr (std::is_same_v<T, ErrorResponse>) {
+      #ifdef VEIL_IPC_DEBUG
+      std::cerr << "[IPC Debug] Serializing ErrorResponse: error=" << r.error_message << std::endl;
+      #endif
       payload["response_type"] = "error";
       payload["error_message"] = r.error_message;
       payload["details"] = r.details;
     }
   }, resp);
+
+  #ifdef VEIL_IPC_DEBUG
+  std::cerr << "[IPC Debug] serialize_response result: " << payload.dump() << std::endl;
+  #endif
 
   return payload;
 }
@@ -702,17 +728,34 @@ std::string serialize_message(const Message& msg) {
     j["id"] = *msg.id;
   }
 
+  #ifdef VEIL_IPC_DEBUG
+  std::cerr << "[IPC Debug] serialize_message: msg.type=" << static_cast<int>(msg.type)
+            << ", payload.index=" << msg.payload.index() << std::endl;
+  std::cerr << "[IPC Debug] Payload holds Command=" << std::holds_alternative<Command>(msg.payload)
+            << ", Event=" << std::holds_alternative<Event>(msg.payload)
+            << ", Response=" << std::holds_alternative<Response>(msg.payload) << std::endl;
+  #endif
+
   // Serialize payload based on type
   std::visit([&j](const auto& payload) {
     using T = std::decay_t<decltype(payload)>;
 
     if constexpr (std::is_same_v<T, Command>) {
+      #ifdef VEIL_IPC_DEBUG
+      std::cerr << "[IPC Debug] Serializing as Command" << std::endl;
+      #endif
       j["payload"] = serialize_command(payload);
     }
     else if constexpr (std::is_same_v<T, Event>) {
+      #ifdef VEIL_IPC_DEBUG
+      std::cerr << "[IPC Debug] Serializing as Event" << std::endl;
+      #endif
       j["payload"] = serialize_event(payload);
     }
     else if constexpr (std::is_same_v<T, Response>) {
+      #ifdef VEIL_IPC_DEBUG
+      std::cerr << "[IPC Debug] Serializing as Response" << std::endl;
+      #endif
       j["payload"] = serialize_response(payload);
     }
   }, msg.payload);
