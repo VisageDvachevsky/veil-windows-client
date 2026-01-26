@@ -330,14 +330,14 @@ bool Tunnel::perform_handshake(std::error_code& ec) {
   // Wait for RESPONSE.
   std::vector<std::uint8_t> response;
   bool received = false;
+  transport::UdpEndpoint response_endpoint;
   int timeout_ms = static_cast<int>(config_.handshake_skew_tolerance.count());
   LOG_DEBUG("HANDSHAKE: Polling for response (timeout: {}ms)", timeout_ms);
 
   udp_socket_.poll(
-      [&response, &received](const transport::UdpPacket& pkt) {
-        LOG_INFO("HANDSHAKE: Received packet from {}:{}, size: {} bytes",
-                 pkt.remote.host, pkt.remote.port, pkt.data.size());
+      [&response, &received, &response_endpoint](const transport::UdpPacket& pkt) {
         response = pkt.data;
+        response_endpoint = pkt.remote;
         received = true;
       },
       timeout_ms, ec);
@@ -348,6 +348,9 @@ bool Tunnel::perform_handshake(std::error_code& ec) {
     LOG_ERROR("HANDSHAKE: No packets received from server");
     return false;
   }
+
+  LOG_INFO("HANDSHAKE: Received packet from {}:{}, size: {} bytes",
+           response_endpoint.host, response_endpoint.port, response.size());
 
   // Process RESPONSE.
   auto hs_session = initiator.consume_response(response);
