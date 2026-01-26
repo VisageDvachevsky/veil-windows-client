@@ -615,10 +615,16 @@ std::optional<Event> deserialize_event(const json& payload) {
 
 std::optional<Response> deserialize_response(const json& payload) {
   if (!payload.contains("response_type")) {
+    #ifdef VEIL_IPC_DEBUG
+    std::cerr << "[IPC Debug] Response payload missing 'response_type' field!" << std::endl;
+    #endif
     return std::nullopt;
   }
 
   std::string resp_type = payload.at("response_type").get<std::string>();
+  #ifdef VEIL_IPC_DEBUG
+  std::cerr << "[IPC Debug] Response type: " << resp_type << std::endl;
+  #endif
 
   if (resp_type == "status") {
     StatusResponse resp;
@@ -711,12 +717,23 @@ std::string serialize_message(const Message& msg) {
   }, msg.payload);
 
   // Add newline delimiter for framing
-  return j.dump() + "\n";
+  std::string result = j.dump() + "\n";
+
+  #ifdef VEIL_IPC_DEBUG
+  std::cerr << "[IPC Debug] Serialized message: " << result;
+  #endif
+
+  return result;
 }
 
 std::optional<Message> deserialize_message(const std::string& json_str) {
   try {
     auto j = json::parse(json_str);
+
+    // Debug: Log the raw JSON being deserialized
+    #ifdef VEIL_IPC_DEBUG
+    std::cerr << "[IPC Debug] Deserializing JSON: " << json_str << std::endl;
+    #endif
 
     Message msg;
 
@@ -741,10 +758,16 @@ std::optional<Message> deserialize_message(const std::string& json_str) {
 
     // Parse payload based on message type
     if (!j.contains("payload")) {
+      #ifdef VEIL_IPC_DEBUG
+      std::cerr << "[IPC Debug] No payload in message!" << std::endl;
+      #endif
       return std::nullopt;
     }
 
     const auto& payload = j.at("payload");
+    #ifdef VEIL_IPC_DEBUG
+    std::cerr << "[IPC Debug] Payload: " << payload.dump() << std::endl;
+    #endif
 
     switch (msg.type) {
       case MessageType::kCommand: {

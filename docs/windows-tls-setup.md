@@ -140,7 +140,7 @@ cd "C:\Program Files\VEIL VPN"
 
 - Qt6 SSL Documentation: https://doc.qt.io/qt-6/ssl.html
 - Qt6 Windows Deployment: https://doc.qt.io/qt-6/windows-deployment.html
-- VEIL VPN GitHub Issues: https://github.com/VisageDvachevsky/veil-windows-client/issues
+- VEIL VPN GitHub Issues: https://github.com/VisageDvachevsky/veil-core/issues
 
 ## Note for Developers
 

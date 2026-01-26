@@ -304,6 +304,11 @@ void IpcClientManager::handleMessage(const ipc::Message& msg) {
       qDebug() << "[IpcClientManager] Received DiagnosticsResponse";
       emit diagnosticsReceived(diagResp->diagnostics);
     }
+    else if (const auto* successResp = std::get_if<ipc::SuccessResponse>(response)) {
+      qDebug() << "[IpcClientManager] Received SuccessResponse";
+      qDebug() << "[IpcClientManager]   Message:" << QString::fromStdString(successResp->message);
+      // Success responses don't need special handling - the status updates will come via events
+    }
     else if (const auto* errorResp = std::get_if<ipc::ErrorResponse>(response)) {
       qWarning() << "[IpcClientManager] Received ErrorResponse";
       qWarning() << "[IpcClientManager]   Error:" << QString::fromStdString(errorResp->error_message);
