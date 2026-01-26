@@ -366,14 +366,14 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
   const auto& cmd = std::get<ipc::Command>(msg.payload);
   LOG_DEBUG("Successfully extracted Command from payload");
 
-  ipc::Response response;
   ipc::Message response_msg;
   response_msg.type = ipc::MessageType::kResponse;
   response_msg.id = msg.id;
 
   // Use std::visit to handle the Command variant
   std::visit(
-      [&response, &response_msg](const auto& command) {
+      [&response_msg](const auto& command) {
+        ipc::Response response;
         using T = std::decay_t<decltype(command)>;
 
         if constexpr (std::is_same_v<T, ipc::ConnectCommand>) {
@@ -604,10 +604,11 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
           LOG_WARN("Unknown command type received");
           response = ipc::ErrorResponse{"Unknown command", ""};
         }
+
+        // Set the response payload inside the visitor to ensure it's always set
+        response_msg.payload = response;
       },
       cmd);
-
-  response_msg.payload = response;
 
   // Log response details before sending
   LOG_DEBUG("========================================");
@@ -618,28 +619,34 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
     LOG_DEBUG("Response message ID: {}", *response_msg.id);
   }
 
-  // Log which response type we're sending
-  if (std::holds_alternative<ipc::SuccessResponse>(response)) {
-    const auto& sr = std::get<ipc::SuccessResponse>(response);
-    LOG_DEBUG("Response type: SuccessResponse");
-    LOG_DEBUG("  Message: {}", sr.message);
-  } else if (std::holds_alternative<ipc::ErrorResponse>(response)) {
-    const auto& er = std::get<ipc::ErrorResponse>(response);
-    LOG_DEBUG("Response type: ErrorResponse");
-    LOG_DEBUG("  Error: {}", er.error_message);
-    LOG_DEBUG("  Details: {}", er.details);
-  } else if (std::holds_alternative<ipc::StatusResponse>(response)) {
-    const auto& sr = std::get<ipc::StatusResponse>(response);
-    LOG_DEBUG("Response type: StatusResponse");
-    LOG_DEBUG("  State: {}", static_cast<int>(sr.status.state));
-  } else if (std::holds_alternative<ipc::MetricsResponse>(response)) {
-    LOG_DEBUG("Response type: MetricsResponse");
-  } else if (std::holds_alternative<ipc::DiagnosticsResponse>(response)) {
-    LOG_DEBUG("Response type: DiagnosticsResponse");
-  } else if (std::holds_alternative<ipc::ClientListResponse>(response)) {
-    LOG_DEBUG("Response type: ClientListResponse");
+  // Log which response type we're sending by checking response_msg.payload
+  if (!std::holds_alternative<ipc::Response>(response_msg.payload)) {
+    LOG_ERROR("Response payload is not a Response variant!");
+    LOG_ERROR("Payload index: {}", response_msg.payload.index());
   } else {
-    LOG_WARN("Response type: UNKNOWN!");
+    const auto& response = std::get<ipc::Response>(response_msg.payload);
+    if (std::holds_alternative<ipc::SuccessResponse>(response)) {
+      const auto& sr = std::get<ipc::SuccessResponse>(response);
+      LOG_DEBUG("Response type: SuccessResponse");
+      LOG_DEBUG("  Message: {}", sr.message);
+    } else if (std::holds_alternative<ipc::ErrorResponse>(response)) {
+      const auto& er = std::get<ipc::ErrorResponse>(response);
+      LOG_DEBUG("Response type: ErrorResponse");
+      LOG_DEBUG("  Error: {}", er.error_message);
+      LOG_DEBUG("  Details: {}", er.details);
+    } else if (std::holds_alternative<ipc::StatusResponse>(response)) {
+      const auto& sr = std::get<ipc::StatusResponse>(response);
+      LOG_DEBUG("Response type: StatusResponse");
+      LOG_DEBUG("  State: {}", static_cast<int>(sr.status.state));
+    } else if (std::holds_alternative<ipc::MetricsResponse>(response)) {
+      LOG_DEBUG("Response type: MetricsResponse");
+    } else if (std::holds_alternative<ipc::DiagnosticsResponse>(response)) {
+      LOG_DEBUG("Response type: DiagnosticsResponse");
+    } else if (std::holds_alternative<ipc::ClientListResponse>(response)) {
+      LOG_DEBUG("Response type: ClientListResponse");
+    } else {
+      LOG_WARN("Response type: UNKNOWN!");
+    }
   }
 
   std::error_code ec;
