@@ -9,6 +9,7 @@
 #include <sddl.h>
 
 #include <algorithm>
+#include <iostream>
 #include <system_error>
 
 #include "common/logging/logger.h"
