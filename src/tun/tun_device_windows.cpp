@@ -36,7 +36,7 @@ typedef WINTUN_ADAPTER_HANDLE(WINAPI* WINTUN_CREATE_ADAPTER_FUNC)(
 typedef WINTUN_ADAPTER_HANDLE(WINAPI* WINTUN_OPEN_ADAPTER_FUNC)(LPCWSTR Name);
 typedef void(WINAPI* WINTUN_CLOSE_ADAPTER_FUNC)(WINTUN_ADAPTER_HANDLE Adapter);
 typedef void(WINAPI* WINTUN_DELETE_DRIVER_FUNC)();
-typedef DWORD(WINAPI* WINTUN_GET_ADAPTER_LUID_FUNC)(
+typedef void(WINAPI* WINTUN_GET_ADAPTER_LUID_FUNC)(
     WINTUN_ADAPTER_HANDLE Adapter, NET_LUID* Luid);
 typedef WINTUN_SESSION_HANDLE(WINAPI* WINTUN_START_SESSION_FUNC)(
     WINTUN_ADAPTER_HANDLE Adapter, DWORD Capacity);
@@ -243,13 +243,8 @@ bool TunDevice::open(const TunConfig& config, std::error_code& ec) {
   LOG_INFO("Created Wintun adapter: {}", device_name_);
 
   // Get the adapter LUID for IP configuration
-  if (g_wintun.GetAdapterLUID(impl_->adapter, &impl_->luid) != NO_ERROR) {
-    ec = last_error();
-    LOG_ERROR("Failed to get adapter LUID: {}", ec.message());
-    g_wintun.CloseAdapter(impl_->adapter);
-    impl_.reset();
-    return false;
-  }
+  // Note: WintunGetAdapterLUID returns void, not an error code
+  g_wintun.GetAdapterLUID(impl_->adapter, &impl_->luid);
 
   // Configure IP address if provided
   if (!config.ip_address.empty()) {
