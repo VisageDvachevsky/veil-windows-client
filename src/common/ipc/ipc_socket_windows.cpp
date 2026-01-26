@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <map>
 #include <system_error>
 
 #include "common/logging/logger.h"
@@ -59,6 +60,7 @@ std::error_code last_error() {
 struct IpcServerImpl {
   HANDLE pipe{INVALID_HANDLE_VALUE};
   std::vector<HANDLE> clients;
+  std::map<int, std::string> receive_buffers;  // fd -> receive buffer (persistent across poll() calls)
   std::vector<OVERLAPPED> overlapped_ops;
 };
 
@@ -131,6 +133,7 @@ void IpcServer::stop() {
     }
   }
   impl_->clients.clear();
+  impl_->receive_buffers.clear();
 
   // Close server pipe
   if (impl_->pipe != INVALID_HANDLE_VALUE) {
@@ -187,7 +190,11 @@ void IpcServer::poll(std::error_code& ec) {
     if (impl_->clients[i] != INVALID_HANDLE_VALUE) {
       ClientConnection conn;
       conn.fd = static_cast<int>(i);
+      // Restore persistent receive buffer for this client
+      conn.receive_buffer = impl_->receive_buffers[conn.fd];
       handle_client_data(conn, ec);
+      // Save updated receive buffer back
+      impl_->receive_buffers[conn.fd] = conn.receive_buffer;
     }
   }
 
@@ -372,6 +379,9 @@ void IpcServer::remove_client(int client_fd) {
     CloseHandle(client);
     impl_->clients[static_cast<std::size_t>(client_fd)] = INVALID_HANDLE_VALUE;
   }
+
+  // Clean up receive buffer for this client
+  impl_->receive_buffers.erase(client_fd);
 
   LOG_DEBUG("Client {} disconnected", client_fd);
 }
