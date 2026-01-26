@@ -417,48 +417,76 @@ bool IpcClient::connect(std::error_code& ec) {
     return false;
   }
 
-  // Try to connect to the named pipe
-  impl_->pipe = CreateFileA(
-      socket_path_.c_str(),
-      GENERIC_READ | GENERIC_WRITE,
-      0,
-      nullptr,
-      OPEN_EXISTING,
-      FILE_FLAG_OVERLAPPED,
-      nullptr);
+  // Retry logic with exponential backoff to handle race condition
+  // where GUI launches before daemon creates the named pipe
+  constexpr int kMaxRetries = 5;
+  constexpr DWORD kRetryDelays[kMaxRetries] = {0, 100, 250, 500, 1000};  // milliseconds
 
-  if (impl_->pipe == INVALID_HANDLE_VALUE) {
-    DWORD error = GetLastError();
-
-    // If the pipe is busy, wait for it
-    if (error == ERROR_PIPE_BUSY) {
-      if (!WaitNamedPipeA(socket_path_.c_str(), kDefaultTimeout)) {
-        ec = last_error();
-        LOG_ERROR("Named pipe busy and wait failed: {}", ec.message());
-        return false;
-      }
-
-      // Try again
-      impl_->pipe = CreateFileA(
-          socket_path_.c_str(),
-          GENERIC_READ | GENERIC_WRITE,
-          0,
-          nullptr,
-          OPEN_EXISTING,
-          FILE_FLAG_OVERLAPPED,
-          nullptr);
+  for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
+    if (attempt > 0) {
+      LOG_DEBUG("Retry attempt {} of {} after {}ms delay", attempt + 1, kMaxRetries, kRetryDelays[attempt]);
+      Sleep(kRetryDelays[attempt]);
     }
 
+    // Try to connect to the named pipe
+    impl_->pipe = CreateFileA(
+        socket_path_.c_str(),
+        GENERIC_READ | GENERIC_WRITE,
+        0,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_FLAG_OVERLAPPED,
+        nullptr);
+
     if (impl_->pipe == INVALID_HANDLE_VALUE) {
+      DWORD error = GetLastError();
+
+      // If the pipe is busy, wait for it
+      if (error == ERROR_PIPE_BUSY) {
+        if (!WaitNamedPipeA(socket_path_.c_str(), kDefaultTimeout)) {
+          ec = last_error();
+          LOG_ERROR("Named pipe busy and wait failed: {}", ec.message());
+          return false;
+        }
+
+        // Try again
+        impl_->pipe = CreateFileA(
+            socket_path_.c_str(),
+            GENERIC_READ | GENERIC_WRITE,
+            0,
+            nullptr,
+            OPEN_EXISTING,
+            FILE_FLAG_OVERLAPPED,
+            nullptr);
+
+        if (impl_->pipe != INVALID_HANDLE_VALUE) {
+          // Success after waiting for busy pipe
+          break;
+        }
+        error = GetLastError();
+      }
+
+      // If pipe doesn't exist and we have retries left, continue to next attempt
+      if (error == ERROR_FILE_NOT_FOUND && attempt < kMaxRetries - 1) {
+        LOG_DEBUG("Named pipe '{}' not found (daemon starting?), will retry", socket_path_);
+        continue;
+      }
+
+      // Failed - log and return error
       ec = last_error();
-      // Use DEBUG level for expected failures (pipe doesn't exist = daemon not running)
-      // This avoids log spam when GUI client is waiting for daemon to start
       if (error == ERROR_FILE_NOT_FOUND) {
-        LOG_DEBUG("Daemon not running, pipe '{}' does not exist", socket_path_);
+        LOG_DEBUG("Daemon not running after {} attempts, pipe '{}' does not exist",
+                  attempt + 1, socket_path_);
       } else {
         LOG_ERROR("Failed to connect to named pipe '{}': {}", socket_path_, ec.message());
       }
       return false;
+    } else {
+      // Successfully opened pipe
+      if (attempt > 0) {
+        LOG_INFO("Connected to named pipe '{}' on attempt {}", socket_path_, attempt + 1);
+      }
+      break;
     }
   }
 
