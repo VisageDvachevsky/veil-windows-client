@@ -468,6 +468,72 @@ verify_new_binary() {
     return 0
 }
 
+# Validate and fix configuration for compatibility with new version
+validate_and_fix_config() {
+    log_step "Validating configuration for compatibility..."
+
+    local config_file="$CONFIG_DIR/${INSTALL_MODE}.conf"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY-RUN] Would validate and fix ${config_file}"
+        return 0
+    fi
+
+    # Only validate server configuration
+    if [[ "$INSTALL_MODE" != "server" ]]; then
+        log_info "Client mode, skipping configuration validation"
+        return 0
+    fi
+
+    if [[ ! -f "$config_file" ]]; then
+        log_warn "Configuration file not found: ${config_file}"
+        return 0
+    fi
+
+    # Extract IP pool configuration
+    local ip_pool_start=$(grep -E '^\s*start\s*=' "$config_file" | grep -v '^#' | sed 's/.*=\s*//' | tr -d ' ')
+    local ip_pool_end=$(grep -E '^\s*end\s*=' "$config_file" | grep -v '^#' | sed 's/.*=\s*//' | tr -d ' ')
+    local max_clients=$(grep -E '^\s*max_clients\s*=' "$config_file" | grep -v '^#' | sed 's/.*=\s*//' | tr -d ' ')
+
+    # If we couldn't extract values, skip validation
+    if [[ -z "$ip_pool_start" || -z "$ip_pool_end" || -z "$max_clients" ]]; then
+        log_warn "Could not extract IP pool or max_clients from config, skipping validation"
+        return 0
+    fi
+
+    log_info "Current config: IP pool ${ip_pool_start} - ${ip_pool_end}, max_clients=${max_clients}"
+
+    # Calculate IP pool size
+    local pool_size=$(calculate_ip_pool_size "$ip_pool_start" "$ip_pool_end")
+
+    log_info "IP pool size: ${pool_size}"
+
+    # Check if max_clients exceeds pool size
+    if [[ "$max_clients" -gt "$pool_size" ]]; then
+        log_warn "Configuration issue detected: max_clients (${max_clients}) exceeds IP pool size (${pool_size})"
+        log_info "Adjusting max_clients to ${pool_size} to match IP pool size"
+
+        # Create a backup before modification
+        cp "$config_file" "${config_file}.pre-upgrade-fix.$(date +%s)"
+
+        # Replace max_clients value in the config file
+        sed -i "s/^\s*max_clients\s*=.*/max_clients = ${pool_size}/" "$config_file"
+
+        # Verify the change
+        local new_max_clients=$(grep -E '^\s*max_clients\s*=' "$config_file" | grep -v '^#' | sed 's/.*=\s*//' | tr -d ' ')
+        if [[ "$new_max_clients" == "$pool_size" ]]; then
+            log_success "Configuration fixed: max_clients updated from ${max_clients} to ${pool_size}"
+        else
+            log_error "Failed to update max_clients in configuration"
+            return 1
+        fi
+    else
+        log_success "Configuration is valid: max_clients (${max_clients}) within IP pool size (${pool_size})"
+    fi
+
+    return 0
+}
+
 # Stop VEIL service gracefully with connection draining
 graceful_stop_service() {
     local service_name="veil-${INSTALL_MODE}"
@@ -734,6 +800,13 @@ perform_update() {
     # Step 11: Verify new binary
     if ! verify_new_binary; then
         log_error "New binary verification failed"
+        rollback_update
+        exit 1
+    fi
+
+    # Step 11.5: Validate and fix configuration for compatibility
+    if ! validate_and_fix_config; then
+        log_error "Configuration validation/fix failed"
         rollback_update
         exit 1
     fi
