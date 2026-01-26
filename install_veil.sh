@@ -1251,7 +1251,7 @@ enable_forwarding = true
 use_masquerade = true
 
 [sessions]
-max_clients = 256
+max_clients = 253
 session_timeout = 300
 idle_warning_sec = 270
 absolute_timeout_sec = 86400
