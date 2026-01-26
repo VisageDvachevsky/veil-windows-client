@@ -18,6 +18,7 @@
 #include <QDir>
 #include <QFile>
 #include <QCoreApplication>
+#include <QDebug>
 
 #include "common/gui/theme.h"
 #include "common/ipc/ipc_protocol.h"
@@ -114,6 +115,7 @@ MainWindow::MainWindow(QWidget* parent)
       trayConnectAction_(nullptr),
       trayDisconnectAction_(nullptr),
       updateChecker_(std::make_unique<UpdateChecker>(this)) {
+  qDebug() << "MainWindow: Initializing GUI components...";
   setupUi();
   setupIpcConnections();
   setupMenuBar();
@@ -121,24 +123,36 @@ MainWindow::MainWindow(QWidget* parent)
   setupSystemTray();
   setupUpdateChecker();
   applyDarkTheme();
+  qDebug() << "MainWindow: GUI components initialized";
 
   // Attempt to connect to daemon, auto-start service on Windows if not running
+  qDebug() << "MainWindow: Attempting to connect to VEIL daemon...";
   if (!ipcManager_->connectToDaemon()) {
+    qWarning() << "MainWindow: Failed to connect to daemon on first attempt";
 #ifdef _WIN32
     // On Windows, automatically start the service if not running
+    qDebug() << "MainWindow: Attempting to ensure VEIL service is running...";
     if (ensureServiceRunning()) {
+      qDebug() << "MainWindow: Service startup succeeded, waiting before retry...";
       // Service started, retry connection after a brief delay
       QTimer::singleShot(2000, this, [this]() {
+        qDebug() << "MainWindow: Retrying daemon connection after service start...";
         if (!ipcManager_->connectToDaemon()) {
+          qWarning() << "MainWindow: Failed to connect to daemon after service start";
           statusBar()->showMessage(tr("Failed to connect to daemon after service start"), 5000);
+        } else {
+          qDebug() << "MainWindow: Successfully connected to daemon after service start";
         }
       });
     } else {
+      qWarning() << "MainWindow: Failed to ensure service is running";
       statusBar()->showMessage(tr("Failed to start VEIL service - run as administrator"), 5000);
     }
 #else
     statusBar()->showMessage(tr("Daemon not running - start veil-client first"), 5000);
 #endif
+  } else {
+    qDebug() << "MainWindow: Successfully connected to daemon";
   }
 
   // Check for updates on startup (delayed)
@@ -897,18 +911,26 @@ void MainWindow::onUpdateCheckFailed(const QString& error) {
 bool MainWindow::ensureServiceRunning() {
   using namespace veil::windows;
 
+  qDebug() << "ensureServiceRunning: Checking VEIL service status...";
+
   // Check if service is already running
   if (ServiceManager::is_running()) {
+    qDebug() << "ensureServiceRunning: Service is already running";
     return true;
   }
 
+  qDebug() << "ensureServiceRunning: Service is not running";
+
   // Check if service is installed
   if (!ServiceManager::is_installed()) {
+    qDebug() << "ensureServiceRunning: Service is not installed, attempting automatic installation...";
     // Service not installed - attempt to install it automatically
     statusBar()->showMessage(tr("VEIL service not found, attempting to install..."));
 
     // Check if we have admin privileges
     if (!elevation::is_elevated()) {
+      qDebug() << "ensureServiceRunning: Application is not elevated, requesting elevation for installation...";
+
       // Try to install with elevation
       QMessageBox msgBox(this);
       msgBox.setIcon(QMessageBox::Information);
@@ -924,22 +946,35 @@ bool MainWindow::ensureServiceRunning() {
         QString appDir = QCoreApplication::applicationDirPath();
         QString servicePath = QDir(appDir).filePath("veil-service.exe");
 
+        qDebug() << "ensureServiceRunning: Application directory:" << appDir;
+        qDebug() << "ensureServiceRunning: Service executable path:" << servicePath;
+
         if (QFile::exists(servicePath)) {
+          qDebug() << "ensureServiceRunning: Service executable found, requesting elevation...";
           // Request elevation and install
           statusBar()->showMessage(tr("Installing VEIL service..."));
           if (elevation::run_elevated(servicePath.toStdString(), "--install", true)) {
+            qDebug() << "ensureServiceRunning: Elevation succeeded, service installation requested";
             statusBar()->showMessage(tr("VEIL service installed successfully"), 3000);
 
             // Verify installation succeeded
             if (ServiceManager::is_installed()) {
+              qDebug() << "ensureServiceRunning: Service installation verified, attempting to start...";
               // Try to start the service
               std::string error;
               if (ServiceManager::start(error)) {
+                qDebug() << "ensureServiceRunning: Service started successfully";
                 statusBar()->showMessage(tr("VEIL service started successfully"), 3000);
                 return true;
+              } else {
+                qWarning() << "ensureServiceRunning: Failed to start service after installation:" << QString::fromStdString(error);
               }
+            } else {
+              qWarning() << "ensureServiceRunning: Service installation verification failed";
             }
           } else {
+            qWarning() << "ensureServiceRunning: Elevation failed or was denied";
+
             QMessageBox::warning(
                 this,
                 tr("Service Installation Failed"),
@@ -948,6 +983,7 @@ bool MainWindow::ensureServiceRunning() {
             return false;
           }
         } else {
+          qWarning() << "ensureServiceRunning: Service executable not found at:" << servicePath;
           QMessageBox::warning(
               this,
               tr("Service Executable Not Found"),
@@ -956,24 +992,35 @@ bool MainWindow::ensureServiceRunning() {
           return false;
         }
       } else {
+        qDebug() << "ensureServiceRunning: User declined service installation";
         return false;
       }
     } else {
+      qDebug() << "ensureServiceRunning: Application is already elevated, installing directly...";
       // We have admin privileges, try to install directly
       QString appDir = QCoreApplication::applicationDirPath();
       QString servicePath = QDir(appDir).filePath("veil-service.exe");
 
+      qDebug() << "ensureServiceRunning: Service executable path:" << servicePath;
+
       if (QFile::exists(servicePath)) {
+        qDebug() << "ensureServiceRunning: Service executable found, installing...";
         std::string error;
         if (ServiceManager::install(servicePath.toStdString(), error)) {
+          qDebug() << "ensureServiceRunning: Service installed successfully, attempting to start...";
           statusBar()->showMessage(tr("VEIL service installed successfully"), 3000);
 
           // Try to start the service
           if (ServiceManager::start(error)) {
+            qDebug() << "ensureServiceRunning: Service started successfully";
             statusBar()->showMessage(tr("VEIL service started successfully"), 3000);
             return true;
+          } else {
+            qWarning() << "ensureServiceRunning: Failed to start service after installation:" << QString::fromStdString(error);
           }
         } else {
+          qWarning() << "ensureServiceRunning: Service installation failed:" << QString::fromStdString(error);
+
           QMessageBox::warning(
               this,
               tr("Service Installation Failed"),
@@ -981,6 +1028,7 @@ bool MainWindow::ensureServiceRunning() {
           return false;
         }
       } else {
+        qWarning() << "ensureServiceRunning: Service executable not found at:" << servicePath;
         QMessageBox::warning(
             this,
             tr("Service Executable Not Found"),
@@ -992,17 +1040,22 @@ bool MainWindow::ensureServiceRunning() {
   }
 
   // Service is installed but not running - try to start it
+  qDebug() << "ensureServiceRunning: Service is installed but not running, attempting to start...";
   statusBar()->showMessage(tr("Starting VEIL service..."));
 
   std::string error;
   if (ServiceManager::start(error)) {
+    qDebug() << "ensureServiceRunning: Service started successfully";
     statusBar()->showMessage(tr("VEIL service started successfully"), 3000);
     return true;
   }
 
+  qWarning() << "ensureServiceRunning: Failed to start service:" << QString::fromStdString(error);
+
   // Failed to start - might need elevation
   if (error.find("Access is denied") != std::string::npos ||
       error.find("5") != std::string::npos) {  // ERROR_ACCESS_DENIED = 5
+    qWarning() << "ensureServiceRunning: Access denied error, need administrator privileges";
     // Need admin rights to start service - inform user
     QMessageBox::warning(
         this,
@@ -1011,6 +1064,7 @@ bool MainWindow::ensureServiceRunning() {
            "Please run this application as Administrator,\n"
            "or start the service manually from Windows Services."));
   } else {
+    qWarning() << "ensureServiceRunning: Service start failed with error:" << QString::fromStdString(error);
     QMessageBox::warning(
         this,
         tr("Service Start Failed"),
