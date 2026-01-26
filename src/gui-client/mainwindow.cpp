@@ -197,41 +197,122 @@ void MainWindow::setupUi() {
 
 // Helper function to build ConnectionConfig from QSettings
 static ipc::ConnectionConfig buildConnectionConfig() {
+  qDebug() << "[MainWindow] ========================================";
+  qDebug() << "[MainWindow] BUILDING CONNECTION CONFIGURATION";
+  qDebug() << "[MainWindow] ========================================";
+
   QSettings settings("VEIL", "VPN Client");
+  qDebug() << "[MainWindow] Loading settings from:" << settings.fileName();
+
   ipc::ConnectionConfig config;
 
   // Server configuration
-  config.server_address = settings.value("server/address", "vpn.example.com").toString().toStdString();
-  config.server_port = static_cast<uint16_t>(settings.value("server/port", 4433).toInt());
+  QString serverAddress = settings.value("server/address", "vpn.example.com").toString();
+  int serverPort = settings.value("server/port", 4433).toInt();
+  qDebug() << "[MainWindow] Server Configuration:";
+  qDebug() << "[MainWindow]   Address:" << serverAddress << "(raw value from settings)";
+  qDebug() << "[MainWindow]   Port:" << serverPort << "(raw value from settings)";
+
+  config.server_address = serverAddress.toStdString();
+  config.server_port = static_cast<uint16_t>(serverPort);
 
   // Cryptographic settings
-  config.key_file = settings.value("crypto/keyFile", "").toString().toStdString();
-  config.obfuscation_seed_file = settings.value("crypto/obfuscationSeedFile", "").toString().toStdString();
+  QString keyFile = settings.value("crypto/keyFile", "").toString();
+  QString obfuscationSeedFile = settings.value("crypto/obfuscationSeedFile", "").toString();
+  qDebug() << "[MainWindow] Cryptographic Settings:";
+  qDebug() << "[MainWindow]   Key File:" << (keyFile.isEmpty() ? "<not set>" : keyFile);
+  qDebug() << "[MainWindow]   Obfuscation Seed File:" << (obfuscationSeedFile.isEmpty() ? "<not set>" : obfuscationSeedFile);
 
-  // TUN interface settings
-  config.tun_device_name = settings.value("tun/deviceName", "veil0").toString().toStdString();
-  config.tun_ip_address = settings.value("tun/ipAddress", "10.8.0.2").toString().toStdString();
-  config.tun_netmask = settings.value("tun/netmask", "255.255.255.0").toString().toStdString();
-  config.tun_mtu = static_cast<uint16_t>(settings.value("tun/mtu", 1400).toInt());
-
-  // Routing settings
-  config.route_all_traffic = settings.value("routing/routeAllTraffic", true).toBool();
-  QString customRoutes = settings.value("routing/customRoutes", "").toString();
-  if (!customRoutes.isEmpty()) {
-    QStringList routeList = customRoutes.split(",", Qt::SkipEmptyParts);
-    for (const QString& route : routeList) {
-      config.custom_routes.push_back(route.trimmed().toStdString());
+  // Verify key file exists
+  if (!keyFile.isEmpty()) {
+    QFileInfo keyFileInfo(keyFile);
+    if (keyFileInfo.exists() && keyFileInfo.isFile()) {
+      qDebug() << "[MainWindow]   Key file exists: YES";
+      qDebug() << "[MainWindow]   Key file size:" << keyFileInfo.size() << "bytes";
+    } else {
+      qWarning() << "[MainWindow]   Key file exists: NO - file not found or not accessible";
     }
   }
 
+  // Verify obfuscation seed file exists
+  if (!obfuscationSeedFile.isEmpty()) {
+    QFileInfo seedFileInfo(obfuscationSeedFile);
+    if (seedFileInfo.exists() && seedFileInfo.isFile()) {
+      qDebug() << "[MainWindow]   Obfuscation seed file exists: YES";
+      qDebug() << "[MainWindow]   Obfuscation seed file size:" << seedFileInfo.size() << "bytes";
+    } else {
+      qWarning() << "[MainWindow]   Obfuscation seed file exists: NO - file not found or not accessible";
+    }
+  }
+
+  config.key_file = keyFile.toStdString();
+  config.obfuscation_seed_file = obfuscationSeedFile.toStdString();
+
+  // TUN interface settings
+  QString tunDeviceName = settings.value("tun/deviceName", "veil0").toString();
+  QString tunIpAddress = settings.value("tun/ipAddress", "10.8.0.2").toString();
+  QString tunNetmask = settings.value("tun/netmask", "255.255.255.0").toString();
+  int tunMtu = settings.value("tun/mtu", 1400).toInt();
+
+  qDebug() << "[MainWindow] TUN Interface Settings:";
+  qDebug() << "[MainWindow]   Device Name:" << tunDeviceName;
+  qDebug() << "[MainWindow]   IP Address:" << tunIpAddress;
+  qDebug() << "[MainWindow]   Netmask:" << tunNetmask;
+  qDebug() << "[MainWindow]   MTU:" << tunMtu;
+
+  config.tun_device_name = tunDeviceName.toStdString();
+  config.tun_ip_address = tunIpAddress.toStdString();
+  config.tun_netmask = tunNetmask.toStdString();
+  config.tun_mtu = static_cast<uint16_t>(tunMtu);
+
+  // Routing settings
+  bool routeAllTraffic = settings.value("routing/routeAllTraffic", true).toBool();
+  QString customRoutes = settings.value("routing/customRoutes", "").toString();
+
+  qDebug() << "[MainWindow] Routing Settings:";
+  qDebug() << "[MainWindow]   Route All Traffic:" << (routeAllTraffic ? "YES" : "NO");
+
+  config.route_all_traffic = routeAllTraffic;
+
+  if (!customRoutes.isEmpty()) {
+    QStringList routeList = customRoutes.split(",", Qt::SkipEmptyParts);
+    qDebug() << "[MainWindow]   Custom Routes (" << routeList.size() << "):";
+    for (const QString& route : routeList) {
+      QString trimmedRoute = route.trimmed();
+      qDebug() << "[MainWindow]     -" << trimmedRoute;
+      config.custom_routes.push_back(trimmedRoute.toStdString());
+    }
+  } else {
+    qDebug() << "[MainWindow]   Custom Routes: <none>";
+  }
+
   // Connection settings
-  config.auto_reconnect = settings.value("connection/autoReconnect", true).toBool();
-  config.reconnect_interval_sec = static_cast<uint32_t>(settings.value("connection/reconnectInterval", 5).toInt());
-  config.max_reconnect_attempts = static_cast<uint32_t>(settings.value("connection/maxReconnectAttempts", 5).toInt());
+  bool autoReconnect = settings.value("connection/autoReconnect", true).toBool();
+  int reconnectInterval = settings.value("connection/reconnectInterval", 5).toInt();
+  int maxReconnectAttempts = settings.value("connection/maxReconnectAttempts", 5).toInt();
+
+  qDebug() << "[MainWindow] Connection Settings:";
+  qDebug() << "[MainWindow]   Auto Reconnect:" << (autoReconnect ? "YES" : "NO");
+  qDebug() << "[MainWindow]   Reconnect Interval:" << reconnectInterval << "seconds";
+  qDebug() << "[MainWindow]   Max Reconnect Attempts:" << maxReconnectAttempts;
+
+  config.auto_reconnect = autoReconnect;
+  config.reconnect_interval_sec = static_cast<uint32_t>(reconnectInterval);
+  config.max_reconnect_attempts = static_cast<uint32_t>(maxReconnectAttempts);
 
   // Advanced settings
-  config.enable_obfuscation = settings.value("advanced/obfuscation", true).toBool();
-  config.dpi_bypass_mode = static_cast<uint8_t>(settings.value("dpi/mode", 0).toInt());
+  bool enableObfuscation = settings.value("advanced/obfuscation", true).toBool();
+  int dpiBypassMode = settings.value("dpi/mode", 0).toInt();
+
+  qDebug() << "[MainWindow] Advanced Settings:";
+  qDebug() << "[MainWindow]   Enable Obfuscation:" << (enableObfuscation ? "YES" : "NO");
+  qDebug() << "[MainWindow]   DPI Bypass Mode:" << dpiBypassMode;
+
+  config.enable_obfuscation = enableObfuscation;
+  config.dpi_bypass_mode = static_cast<uint8_t>(dpiBypassMode);
+
+  qDebug() << "[MainWindow] Configuration building complete";
+  qDebug() << "[MainWindow] ========================================";
 
   return config;
 }
@@ -239,26 +320,49 @@ static ipc::ConnectionConfig buildConnectionConfig() {
 void MainWindow::setupIpcConnections() {
   // Connect connection widget signals to IPC manager
   connect(connectionWidget_, &ConnectionWidget::connectRequested, this, [this]() {
+    qDebug() << "[MainWindow] ========================================";
+    qDebug() << "[MainWindow] CONNECT BUTTON CLICKED";
+    qDebug() << "[MainWindow] ========================================";
+    qDebug() << "[MainWindow] User requested VPN connection";
+
     // First check if daemon is connected, try to reconnect if not
+    qDebug() << "[MainWindow] Checking daemon connection status...";
+
     if (!ipcManager_->isConnected()) {
+      qWarning() << "[MainWindow] Daemon is NOT connected, attempting to connect...";
+
       if (!ipcManager_->connectToDaemon()) {
+        qWarning() << "[MainWindow] Failed to connect to daemon";
 #ifdef _WIN32
         // On Windows, try to auto-start the service
+        qDebug() << "[MainWindow] Platform: Windows - attempting to ensure service is running";
+
         if (!ensureServiceRunning()) {
+          qWarning() << "[MainWindow] Failed to ensure service is running";
           connectionWidget_->setConnectionState(ConnectionState::kError);
           updateTrayIcon(TrayConnectionState::kError);
           return;
         }
+
+        qDebug() << "[MainWindow] Service should be running now, waiting 2 seconds before retry...";
+
         // Wait for service to start, then retry connection
         connectionWidget_->setConnectionState(ConnectionState::kConnecting);
         updateTrayIcon(TrayConnectionState::kConnecting);
+
         QTimer::singleShot(2000, this, [this]() {
+          qDebug() << "[MainWindow] Retrying daemon connection after service startup delay...";
+
           if (!ipcManager_->connectToDaemon()) {
+            qWarning() << "[MainWindow] Failed to connect to daemon even after service start";
             connectionWidget_->setErrorMessage(
                 tr("Failed to connect to daemon after service start."));
             connectionWidget_->setConnectionState(ConnectionState::kError);
             updateTrayIcon(TrayConnectionState::kError);
           } else {
+            qDebug() << "[MainWindow] Successfully connected to daemon after service start";
+            qDebug() << "[MainWindow] Now building and sending connection configuration...";
+
             // Now that we're connected, send the connect command with full config
             ipc::ConnectionConfig config = buildConnectionConfig();
             ipcManager_->sendConnect(config);
@@ -267,6 +371,7 @@ void MainWindow::setupIpcConnections() {
         return;
 #else
         // Failed to connect to daemon - show error
+        qWarning() << "[MainWindow] Platform: Non-Windows - cannot auto-start daemon";
         connectionWidget_->setErrorMessage(
             tr("Cannot connect: VEIL daemon is not running.\n"
                "Please start the daemon first."));
@@ -275,15 +380,28 @@ void MainWindow::setupIpcConnections() {
         return;
 #endif
       }
+    } else {
+      qDebug() << "[MainWindow] Daemon is already connected";
     }
+
+    qDebug() << "[MainWindow] Building connection configuration from settings...";
 
     // Build full configuration from settings
     ipc::ConnectionConfig config = buildConnectionConfig();
 
+    qDebug() << "[MainWindow] Validating configuration...";
+
     // Validate key file exists if specified
     if (!config.key_file.empty()) {
+      qDebug() << "[MainWindow] Checking key file:" << QString::fromStdString(config.key_file);
+
       QFileInfo keyFileInfo(QString::fromStdString(config.key_file));
       if (!keyFileInfo.exists() || !keyFileInfo.isFile()) {
+        qWarning() << "[MainWindow] Key file validation FAILED - file does not exist or is not a file";
+        qWarning() << "[MainWindow]   Exists:" << keyFileInfo.exists();
+        qWarning() << "[MainWindow]   Is File:" << keyFileInfo.isFile();
+        qWarning() << "[MainWindow]   Path:" << keyFileInfo.absoluteFilePath();
+
         connectionWidget_->setErrorMessage(
             tr("Pre-shared key file not found: %1\n"
                "Please configure a valid key file in Settings.")
@@ -291,62 +409,95 @@ void MainWindow::setupIpcConnections() {
         connectionWidget_->setConnectionState(ConnectionState::kError);
         updateTrayIcon(TrayConnectionState::kError);
         return;
+      } else {
+        qDebug() << "[MainWindow] Key file validation PASSED";
       }
+    } else {
+      qWarning() << "[MainWindow] No key file configured (this may cause connection issues)";
     }
+
+    qDebug() << "[MainWindow] Configuration validated successfully";
+    qDebug() << "[MainWindow] Sending connection request to daemon via IPC...";
 
     if (!ipcManager_->sendConnect(config)) {
       // Failed to send connect command
+      qWarning() << "[MainWindow] Failed to send connect command to daemon";
       connectionWidget_->setErrorMessage(
           tr("Failed to send connect command to daemon."));
       connectionWidget_->setConnectionState(ConnectionState::kError);
       updateTrayIcon(TrayConnectionState::kError);
+    } else {
+      qDebug() << "[MainWindow] Connect command sent successfully, waiting for response...";
     }
   });
 
   connect(connectionWidget_, &ConnectionWidget::disconnectRequested, this, [this]() {
+    qDebug() << "[MainWindow] ========================================";
+    qDebug() << "[MainWindow] DISCONNECT BUTTON CLICKED";
+    qDebug() << "[MainWindow] ========================================";
+    qDebug() << "[MainWindow] User requested VPN disconnection";
+    qDebug() << "[MainWindow] Sending disconnect request to daemon...";
+
     ipcManager_->sendDisconnect();
   });
 
   // Connect IPC manager signals to UI widgets
   connect(ipcManager_.get(), &IpcClientManager::connectionStateChanged,
           this, [this](ipc::ConnectionState state) {
+    qDebug() << "[MainWindow] Connection state changed:" << static_cast<int>(state);
+
     // Convert IPC state to GUI state
     ConnectionState guiState;
     switch (state) {
       case ipc::ConnectionState::kDisconnected:
+        qDebug() << "[MainWindow] New state: DISCONNECTED";
         guiState = ConnectionState::kDisconnected;
         updateTrayIcon(TrayConnectionState::kDisconnected);
         break;
       case ipc::ConnectionState::kConnecting:
+        qDebug() << "[MainWindow] New state: CONNECTING";
         guiState = ConnectionState::kConnecting;
         updateTrayIcon(TrayConnectionState::kConnecting);
         break;
       case ipc::ConnectionState::kConnected:
+        qDebug() << "[MainWindow] New state: CONNECTED";
         guiState = ConnectionState::kConnected;
         updateTrayIcon(TrayConnectionState::kConnected);
         break;
       case ipc::ConnectionState::kReconnecting:
+        qDebug() << "[MainWindow] New state: RECONNECTING";
         guiState = ConnectionState::kReconnecting;
         updateTrayIcon(TrayConnectionState::kConnecting);
         break;
       case ipc::ConnectionState::kError:
+        qDebug() << "[MainWindow] New state: ERROR";
         guiState = ConnectionState::kError;
         updateTrayIcon(TrayConnectionState::kError);
         break;
     }
+
+    qDebug() << "[MainWindow] Updating UI to reflect new state";
     connectionWidget_->setConnectionState(guiState);
   });
 
   connect(ipcManager_.get(), &IpcClientManager::statusUpdated,
           this, [this](const ipc::ConnectionStatus& status) {
+    qDebug() << "[MainWindow] Received status update from daemon";
+
     if (!status.session_id.empty()) {
+      qDebug() << "[MainWindow]   Session ID:" << QString::fromStdString(status.session_id);
       connectionWidget_->setSessionId(QString::fromStdString(status.session_id));
     }
+
     if (!status.server_address.empty()) {
+      qDebug() << "[MainWindow]   Server Address:" << QString::fromStdString(status.server_address)
+               << ":" << status.server_port;
       connectionWidget_->setServerAddress(
           QString::fromStdString(status.server_address), status.server_port);
     }
+
     if (!status.error_message.empty()) {
+      qWarning() << "[MainWindow]   Error Message:" << QString::fromStdString(status.error_message);
       connectionWidget_->setErrorMessage(QString::fromStdString(status.error_message));
     }
   });
@@ -396,18 +547,32 @@ void MainWindow::setupIpcConnections() {
 
   connect(ipcManager_.get(), &IpcClientManager::errorOccurred,
           this, [this](const QString& error, const QString& details) {
+    qWarning() << "[MainWindow] ========================================";
+    qWarning() << "[MainWindow] ERROR OCCURRED";
+    qWarning() << "[MainWindow] ========================================";
+    qWarning() << "[MainWindow] Error:" << error;
+    qWarning() << "[MainWindow] Details:" << details;
+    qWarning() << "[MainWindow] ========================================";
+
     connectionWidget_->setErrorMessage(error);
     statusBar()->showMessage(error + ": " + details, 5000);
   });
 
   connect(ipcManager_.get(), &IpcClientManager::daemonConnectionChanged,
           this, [this](bool connected) {
+    qDebug() << "[MainWindow] Daemon connection status changed:" << (connected ? "CONNECTED" : "DISCONNECTED");
+
     diagnosticsWidget_->setDaemonConnected(connected);
+
     if (connected) {
+      qDebug() << "[MainWindow] Daemon is now connected";
       statusBar()->showMessage(tr("Connected to daemon"), 3000);
     } else {
+      qWarning() << "[MainWindow] Daemon is now disconnected";
       statusBar()->showMessage(tr("Disconnected from daemon"), 3000);
+
       // Reset UI to disconnected state
+      qDebug() << "[MainWindow] Resetting UI to disconnected state";
       connectionWidget_->setConnectionState(ConnectionState::kDisconnected);
       updateTrayIcon(TrayConnectionState::kDisconnected);
     }
