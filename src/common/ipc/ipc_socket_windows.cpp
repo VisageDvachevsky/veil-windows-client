@@ -284,6 +284,11 @@ void IpcServer::handle_client_data(ClientConnection& conn, std::error_code& ec) 
     return;  // No data available
   }
 
+  #ifdef VEIL_IPC_DEBUG
+  std::cerr << "[IPC Server Debug] Data available on client " << conn.fd
+            << ": " << available << " bytes" << std::endl;
+  #endif
+
   // Read data
   if (!ReadFile(client, buffer, sizeof(buffer) - 1, &bytes_read, nullptr)) {
     DWORD error = GetLastError();
@@ -301,9 +306,23 @@ void IpcServer::handle_client_data(ClientConnection& conn, std::error_code& ec) 
     return;
   }
 
+  #ifdef VEIL_IPC_DEBUG
+  std::cerr << "[IPC Server Debug] Read " << bytes_read << " bytes from client " << conn.fd << std::endl;
+  #endif
+
   // Null-terminate and process
   buffer[bytes_read] = '\0';
+
+  #ifdef VEIL_IPC_DEBUG
+  std::cerr << "[IPC Server Debug] Buffer content: " << buffer << std::endl;
+  #endif
+
   conn.receive_buffer += buffer;
+
+  #ifdef VEIL_IPC_DEBUG
+  std::cerr << "[IPC Server Debug] receive_buffer size: " << conn.receive_buffer.size()
+            << ", contains newline: " << (conn.receive_buffer.find('\n') != std::string::npos ? "YES" : "NO") << std::endl;
+  #endif
 
   // Process complete messages (newline-delimited)
   std::size_t pos = 0;
@@ -311,10 +330,32 @@ void IpcServer::handle_client_data(ClientConnection& conn, std::error_code& ec) 
     std::string message_str = conn.receive_buffer.substr(0, pos);
     conn.receive_buffer.erase(0, pos + 1);
 
+    #ifdef VEIL_IPC_DEBUG
+    std::cerr << "[IPC Server Debug] Received message from client " << conn.fd
+              << ": " << message_str << std::endl;
+    #endif
+
     // Deserialize and handle message
     auto msg = deserialize_message(message_str);
+
+    #ifdef VEIL_IPC_DEBUG
+    std::cerr << "[IPC Server Debug] Deserialization result: " << (msg.has_value() ? "SUCCESS" : "FAILED") << std::endl;
+    std::cerr << "[IPC Server Debug] message_handler_ is set: " << (message_handler_ ? "YES" : "NO") << std::endl;
+    #endif
+
     if (msg && message_handler_) {
+      #ifdef VEIL_IPC_DEBUG
+      std::cerr << "[IPC Server Debug] Calling message_handler_" << std::endl;
+      #endif
       message_handler_(*msg, conn.fd);
+      #ifdef VEIL_IPC_DEBUG
+      std::cerr << "[IPC Server Debug] message_handler_ returned" << std::endl;
+      #endif
+    } else {
+      #ifdef VEIL_IPC_DEBUG
+      if (!msg) std::cerr << "[IPC Server Debug] Message deserialization FAILED!" << std::endl;
+      if (!message_handler_) std::cerr << "[IPC Server Debug] message_handler_ is NOT SET!" << std::endl;
+      #endif
     }
   }
 }
