@@ -114,6 +114,13 @@ bool UdpSocket::open(std::uint16_t bind_port, bool reuse_port, std::error_code& 
   if (getsockname(s, reinterpret_cast<sockaddr*>(&bound_addr), &addr_len) == 0) {
     std::uint16_t actual_port = ntohs(bound_addr.sin_port);
     LOG_INFO("[UDP] Socket bound successfully to 0.0.0.0:{}", actual_port);
+
+    // Log local interface address for diagnostics
+    std::array<char, INET_ADDRSTRLEN> local_addr_str{};
+    if (inet_ntop(AF_INET, &bound_addr.sin_addr, local_addr_str.data(),
+                  static_cast<socklen_t>(local_addr_str.size())) != nullptr) {
+      LOG_INFO("[UDP] Socket local address: {}:{}", local_addr_str.data(), actual_port);
+    }
   } else {
     LOG_INFO("[UDP] Socket bound successfully to 0.0.0.0:{}", bind_port);
   }
