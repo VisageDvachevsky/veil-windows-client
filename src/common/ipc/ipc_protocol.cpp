@@ -44,7 +44,13 @@ void to_json(json& j, const ConnectionConfig& cfg) {
     {"reconnect_interval_sec", cfg.reconnect_interval_sec},
     {"max_reconnect_attempts", cfg.max_reconnect_attempts},
     {"route_all_traffic", cfg.route_all_traffic},
-    {"custom_routes", cfg.custom_routes}
+    {"custom_routes", cfg.custom_routes},
+    {"key_file", cfg.key_file},
+    {"obfuscation_seed_file", cfg.obfuscation_seed_file},
+    {"tun_device_name", cfg.tun_device_name},
+    {"tun_ip_address", cfg.tun_ip_address},
+    {"tun_netmask", cfg.tun_netmask},
+    {"tun_mtu", cfg.tun_mtu}
   };
 }
 
@@ -57,6 +63,25 @@ void from_json(const json& j, ConnectionConfig& cfg) {
   j.at("max_reconnect_attempts").get_to(cfg.max_reconnect_attempts);
   j.at("route_all_traffic").get_to(cfg.route_all_traffic);
   j.at("custom_routes").get_to(cfg.custom_routes);
+  // Optional fields with defaults
+  if (j.contains("key_file")) {
+    j.at("key_file").get_to(cfg.key_file);
+  }
+  if (j.contains("obfuscation_seed_file")) {
+    j.at("obfuscation_seed_file").get_to(cfg.obfuscation_seed_file);
+  }
+  if (j.contains("tun_device_name")) {
+    j.at("tun_device_name").get_to(cfg.tun_device_name);
+  }
+  if (j.contains("tun_ip_address")) {
+    j.at("tun_ip_address").get_to(cfg.tun_ip_address);
+  }
+  if (j.contains("tun_netmask")) {
+    j.at("tun_netmask").get_to(cfg.tun_netmask);
+  }
+  if (j.contains("tun_mtu")) {
+    j.at("tun_mtu").get_to(cfg.tun_mtu);
+  }
 }
 
 // ConnectionStatus

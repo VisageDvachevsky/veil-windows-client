@@ -333,10 +333,30 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
             g_tunnel_config.max_reconnect_attempts =
                 static_cast<int>(command.config.max_reconnect_attempts);
 
-            // Set TUN device configuration (default Windows values)
-            g_tunnel_config.tun.ip_address = "10.8.0.2";
-            g_tunnel_config.tun.netmask = "255.255.255.0";
-            g_tunnel_config.tun.mtu = 1420;
+            // Cryptographic configuration - critical for VPN handshake!
+            g_tunnel_config.key_file = command.config.key_file;
+            g_tunnel_config.obfuscation_seed_file = command.config.obfuscation_seed_file;
+
+            // Set TUN device configuration from IPC command (with defaults)
+            g_tunnel_config.tun.device_name = command.config.tun_device_name.empty()
+                ? "veil0" : command.config.tun_device_name;
+            g_tunnel_config.tun.ip_address = command.config.tun_ip_address.empty()
+                ? "10.8.0.2" : command.config.tun_ip_address;
+            g_tunnel_config.tun.netmask = command.config.tun_netmask.empty()
+                ? "255.255.255.0" : command.config.tun_netmask;
+            g_tunnel_config.tun.mtu = command.config.tun_mtu > 0
+                ? command.config.tun_mtu : 1400;
+
+            // Log configuration for debugging
+            LOG_INFO("Connecting to {}:{}", g_tunnel_config.server_address, g_tunnel_config.server_port);
+            if (!g_tunnel_config.key_file.empty()) {
+              LOG_DEBUG("Using pre-shared key file: {}", g_tunnel_config.key_file);
+            } else {
+              LOG_WARN("No pre-shared key file specified - handshake will fail!");
+            }
+            if (!g_tunnel_config.obfuscation_seed_file.empty()) {
+              LOG_DEBUG("Using obfuscation seed file: {}", g_tunnel_config.obfuscation_seed_file);
+            }
 
             // Create and initialize tunnel
             g_tunnel = std::make_unique<tunnel::Tunnel>(g_tunnel_config);
@@ -458,6 +478,22 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
               std::chrono::seconds(command.config.reconnect_interval_sec);
           g_tunnel_config.max_reconnect_attempts =
               static_cast<int>(command.config.max_reconnect_attempts);
+          // Cryptographic configuration
+          g_tunnel_config.key_file = command.config.key_file;
+          g_tunnel_config.obfuscation_seed_file = command.config.obfuscation_seed_file;
+          // TUN configuration
+          if (!command.config.tun_device_name.empty()) {
+            g_tunnel_config.tun.device_name = command.config.tun_device_name;
+          }
+          if (!command.config.tun_ip_address.empty()) {
+            g_tunnel_config.tun.ip_address = command.config.tun_ip_address;
+          }
+          if (!command.config.tun_netmask.empty()) {
+            g_tunnel_config.tun.netmask = command.config.tun_netmask;
+          }
+          if (command.config.tun_mtu > 0) {
+            g_tunnel_config.tun.mtu = command.config.tun_mtu;
+          }
           response = ipc::SuccessResponse{"Configuration updated"};
         } else if constexpr (std::is_same_v<T, ipc::ExportDiagnosticsCommand>) {
           LOG_DEBUG("Received ExportDiagnosticsCommand");

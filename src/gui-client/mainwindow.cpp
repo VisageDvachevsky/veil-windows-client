@@ -17,7 +17,9 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QCoreApplication>
+#include <QStringList>
 #include <QDebug>
 
 #include "common/gui/theme.h"
@@ -193,6 +195,47 @@ void MainWindow::setupUi() {
           connectionWidget_, &ConnectionWidget::loadServerSettings);
 }
 
+// Helper function to build ConnectionConfig from QSettings
+static ipc::ConnectionConfig buildConnectionConfig() {
+  QSettings settings("VEIL", "VPN Client");
+  ipc::ConnectionConfig config;
+
+  // Server configuration
+  config.server_address = settings.value("server/address", "vpn.example.com").toString().toStdString();
+  config.server_port = static_cast<uint16_t>(settings.value("server/port", 4433).toInt());
+
+  // Cryptographic settings
+  config.key_file = settings.value("crypto/keyFile", "").toString().toStdString();
+  config.obfuscation_seed_file = settings.value("crypto/obfuscationSeedFile", "").toString().toStdString();
+
+  // TUN interface settings
+  config.tun_device_name = settings.value("tun/deviceName", "veil0").toString().toStdString();
+  config.tun_ip_address = settings.value("tun/ipAddress", "10.8.0.2").toString().toStdString();
+  config.tun_netmask = settings.value("tun/netmask", "255.255.255.0").toString().toStdString();
+  config.tun_mtu = static_cast<uint16_t>(settings.value("tun/mtu", 1400).toInt());
+
+  // Routing settings
+  config.route_all_traffic = settings.value("routing/routeAllTraffic", true).toBool();
+  QString customRoutes = settings.value("routing/customRoutes", "").toString();
+  if (!customRoutes.isEmpty()) {
+    QStringList routeList = customRoutes.split(",", Qt::SkipEmptyParts);
+    for (const QString& route : routeList) {
+      config.custom_routes.push_back(route.trimmed().toStdString());
+    }
+  }
+
+  // Connection settings
+  config.auto_reconnect = settings.value("connection/autoReconnect", true).toBool();
+  config.reconnect_interval_sec = static_cast<uint32_t>(settings.value("connection/reconnectInterval", 5).toInt());
+  config.max_reconnect_attempts = static_cast<uint32_t>(settings.value("connection/maxReconnectAttempts", 5).toInt());
+
+  // Advanced settings
+  config.enable_obfuscation = settings.value("advanced/obfuscation", true).toBool();
+  config.dpi_bypass_mode = static_cast<uint8_t>(settings.value("dpi/mode", 0).toInt());
+
+  return config;
+}
+
 void MainWindow::setupIpcConnections() {
   // Connect connection widget signals to IPC manager
   connect(connectionWidget_, &ConnectionWidget::connectRequested, this, [this]() {
@@ -216,11 +259,9 @@ void MainWindow::setupIpcConnections() {
             connectionWidget_->setConnectionState(ConnectionState::kError);
             updateTrayIcon(TrayConnectionState::kError);
           } else {
-            // Now that we're connected, send the connect command
-            QSettings settings("VEIL", "VPN Client");
-            QString serverAddress = settings.value("server/address", "vpn.example.com").toString();
-            uint16_t serverPort = static_cast<uint16_t>(settings.value("server/port", 4433).toInt());
-            ipcManager_->sendConnect(serverAddress, serverPort);
+            // Now that we're connected, send the connect command with full config
+            ipc::ConnectionConfig config = buildConnectionConfig();
+            ipcManager_->sendConnect(config);
           }
         });
         return;
@@ -236,12 +277,24 @@ void MainWindow::setupIpcConnections() {
       }
     }
 
-    // Get server address and port from settings
-    QSettings settings("VEIL", "VPN Client");
-    QString serverAddress = settings.value("server/address", "vpn.example.com").toString();
-    uint16_t serverPort = static_cast<uint16_t>(settings.value("server/port", 4433).toInt());
+    // Build full configuration from settings
+    ipc::ConnectionConfig config = buildConnectionConfig();
 
-    if (!ipcManager_->sendConnect(serverAddress, serverPort)) {
+    // Validate key file exists if specified
+    if (!config.key_file.empty()) {
+      QFileInfo keyFileInfo(QString::fromStdString(config.key_file));
+      if (!keyFileInfo.exists() || !keyFileInfo.isFile()) {
+        connectionWidget_->setErrorMessage(
+            tr("Pre-shared key file not found: %1\n"
+               "Please configure a valid key file in Settings.")
+                .arg(QString::fromStdString(config.key_file)));
+        connectionWidget_->setConnectionState(ConnectionState::kError);
+        updateTrayIcon(TrayConnectionState::kError);
+        return;
+      }
+    }
+
+    if (!ipcManager_->sendConnect(config)) {
       // Failed to send connect command
       connectionWidget_->setErrorMessage(
           tr("Failed to send connect command to daemon."));

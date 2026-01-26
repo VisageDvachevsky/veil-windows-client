@@ -65,7 +65,7 @@ bool IpcClientManager::isConnected() const {
   return client_->is_connected();
 }
 
-bool IpcClientManager::sendConnect(const QString& serverAddress, uint16_t serverPort) {
+bool IpcClientManager::sendConnect(const ipc::ConnectionConfig& config) {
   if (!isConnected()) {
     emit errorOccurred(
         tr("Not connected to daemon"),
@@ -74,11 +74,7 @@ bool IpcClientManager::sendConnect(const QString& serverAddress, uint16_t server
   }
 
   ipc::ConnectCommand cmd;
-  cmd.config.server_address = serverAddress.toStdString();
-  cmd.config.server_port = serverPort;
-  cmd.config.enable_obfuscation = true;
-  cmd.config.auto_reconnect = true;
-  cmd.config.route_all_traffic = true;
+  cmd.config = config;
 
   std::error_code ec;
   if (!client_->send_command(ipc::Command{cmd}, ec)) {
@@ -89,6 +85,17 @@ bool IpcClientManager::sendConnect(const QString& serverAddress, uint16_t server
   }
 
   return true;
+}
+
+bool IpcClientManager::sendConnect(const QString& serverAddress, uint16_t serverPort) {
+  ipc::ConnectionConfig config;
+  config.server_address = serverAddress.toStdString();
+  config.server_port = serverPort;
+  config.enable_obfuscation = true;
+  config.auto_reconnect = true;
+  config.route_all_traffic = true;
+
+  return sendConnect(config);
 }
 
 bool IpcClientManager::sendDisconnect() {
