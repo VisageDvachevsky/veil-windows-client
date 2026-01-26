@@ -29,7 +29,7 @@ int main(int argc, char* argv[]) {
   } else {
     qWarning() << "WARNING: Qt Network does not support SSL/TLS!";
     qWarning() << "This may cause issues with HTTPS connections for update checks.";
-    qWarning() << "The VPN tunnel itself is not affected (uses WireGuard protocol).";
+    qWarning() << "The VPN tunnel itself is not affected (uses VEIL protocol).";
   }
 
   // List available TLS backends

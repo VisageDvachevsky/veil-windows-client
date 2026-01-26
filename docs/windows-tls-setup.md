@@ -13,7 +13,7 @@ qt.network.ssl: No TLS backend is available
 QSslSocket::connectToHostEncrypted: TLS initialization failed
 ```
 
-**Important:** These warnings only affect the update checker feature. The VPN tunnel itself uses the WireGuard protocol and is NOT affected by missing TLS support in Qt.
+**Important:** These warnings only affect the update checker feature. The VPN tunnel itself uses the VEIL protocol and is NOT affected by missing TLS support in Qt.
 
 ## Qt6 TLS Backends on Windows
 
