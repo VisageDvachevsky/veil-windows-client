@@ -224,11 +224,16 @@ count_active_connections() {
             veil_port=$(grep -E '^listen_port' "$CONFIG_DIR/server.conf" 2>/dev/null | grep -oE '[0-9]+' || echo "4433")
         fi
         # Count UDP connections (VEIL uses UDP)
-        count=$(ss -u -n sport = :"$veil_port" 2>/dev/null | grep -c ESTAB || echo "0")
+        # Note: grep -c always outputs a number, even 0, so no fallback needed
+        # The || echo "0" was causing "0\n0" output when grep -c returned 0 with exit code 1
+        count=$(ss -u -n sport = :"$veil_port" 2>/dev/null | grep -c ESTAB)
         # If no ESTAB, count any connected peers
         if [[ "$count" == "0" ]]; then
-            count=$(ss -u -n sport = :"$veil_port" 2>/dev/null | tail -n +2 | wc -l || echo "0")
+            # wc -l always outputs a number, fallback only needed if ss command fails completely
+            count=$(ss -u -n sport = :"$veil_port" 2>/dev/null | tail -n +2 | wc -l)
         fi
+        # Ensure count is a valid number (default to 0 if empty or invalid)
+        count=${count:-0}
     fi
 
     echo "$count"
