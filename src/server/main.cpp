@@ -210,7 +210,7 @@ int main(int argc, char* argv[]) {
     std::cerr << "  -l, --listen <addr>      Listen address (default: 0.0.0.0)" << '\n';
     std::cerr << "  -c, --config <file>      Configuration file path" << '\n';
     std::cerr << "  -k, --key <file>         Pre-shared key file" << '\n';
-    std::cerr << "  -m, --max-clients <n>    Maximum clients (default: 256)" << '\n';
+    std::cerr << "  -m, --max-clients <n>    Maximum clients (default: 253)" << '\n';
     std::cerr << "  -d, --daemon             Run as daemon" << '\n';
     std::cerr << "  -v, --verbose            Enable verbose logging" << '\n';
     std::cerr << "  --tun-name <name>        TUN device name (default: veil0)" << '\n';

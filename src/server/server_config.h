@@ -23,7 +23,7 @@ struct ServerConfig {
   tun::NatConfig nat;
 
   // Session management.
-  std::size_t max_clients{256};
+  std::size_t max_clients{253};
   std::chrono::seconds session_timeout{300};
   std::chrono::seconds cleanup_interval{60};
 
