@@ -14,12 +14,14 @@ on:
       - 'src/transport/**'
       - 'src/common/handshake/**'
       - 'tests/integration/connection_test.cpp'
+      - '.github/workflows/connection-test.yml'
   pull_request:
     paths:
       - 'src/tunnel/**'
       - 'src/transport/**'
       - 'src/common/handshake/**'
       - 'tests/integration/connection_test.cpp'
+      - '.github/workflows/connection-test.yml'
 
 jobs:
   connection-test:
