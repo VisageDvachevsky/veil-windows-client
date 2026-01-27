@@ -26,6 +26,7 @@
 #include "../common/ipc/ipc_socket.h"
 #include "../common/logging/logger.h"
 #include "../tunnel/tunnel.h"
+#include "../tun/routing.h"
 #include "console_handler.h"
 #include "service_manager.h"
 
@@ -48,12 +49,19 @@ static ServiceStats g_stats;
 static std::unique_ptr<tunnel::Tunnel> g_tunnel;
 static std::unique_ptr<std::thread> g_tunnel_thread;
 static tunnel::TunnelConfig g_tunnel_config;
+static bool g_routes_configured{false};
+static bool g_route_all_traffic{false};
+static std::vector<std::string> g_custom_routes;
 
 // Forward declarations
 void WINAPI service_main(DWORD argc, LPSTR* argv);
 void run_service();
 void stop_service();
 void handle_ipc_message(const ipc::Message& msg, int client_fd);
+void configure_routes();
+void cleanup_routes();
+void configure_firewall_rule(std::uint16_t port);
+void cleanup_firewall_rule();
 
 // ============================================================================
 // Main Entry Point
@@ -362,6 +370,154 @@ void stop_service() {
 }
 
 // ============================================================================
+// Route Management
+// ============================================================================
+
+void configure_routes() {
+  if (!g_tunnel || g_routes_configured) {
+    return;
+  }
+
+  auto* route_manager = g_tunnel->route_manager();
+  auto* tun_device = g_tunnel->tun_device();
+
+  if (!tun_device || !tun_device->is_open()) {
+    LOG_WARN("TUN device not available for route configuration");
+    return;
+  }
+
+  std::error_code ec;
+  const std::string device_name = tun_device->device_name();
+
+  LOG_INFO("========================================");
+  LOG_INFO("CONFIGURING ROUTES");
+  LOG_INFO("========================================");
+  LOG_INFO("TUN device: {}", device_name);
+  LOG_INFO("Route all traffic: {}", g_route_all_traffic);
+
+  // Add custom routes first
+  for (const auto& route_str : g_custom_routes) {
+    tun::Route route;
+    auto slash_pos = route_str.find('/');
+    if (slash_pos != std::string::npos) {
+      route.destination = route_str;
+    } else {
+      route.destination = route_str;
+      route.netmask = "255.255.255.255";
+    }
+    route.interface = device_name;
+
+    if (!route_manager->add_route(route, ec)) {
+      LOG_WARN("Failed to add custom route {}: {}", route_str, ec.message());
+    } else {
+      LOG_INFO("Added custom route: {}", route_str);
+    }
+  }
+
+  // Set default route if requested
+  if (g_route_all_traffic) {
+    LOG_INFO("Setting up default route via VPN...");
+
+    // Get current default gateway for bypass route
+    auto state = route_manager->get_system_state(ec);
+    if (state && !state->default_gateway.empty()) {
+      LOG_INFO("Current default gateway: {} via {}", state->default_gateway, state->default_interface);
+
+      // Add bypass route for VPN server via original gateway
+      // This ensures VPN packets still go through the real network
+      // Use a very low metric (1) to ensure this route takes priority over VPN routes
+      tun::Route bypass;
+      bypass.destination = g_tunnel_config.server_address;
+      bypass.netmask = "255.255.255.255";
+      bypass.gateway = state->default_gateway;
+      bypass.interface = state->default_interface;
+      bypass.metric = 1;  // Lower metric = higher priority than VPN routes (metric 5)
+
+      if (!route_manager->add_route(bypass, ec)) {
+        LOG_WARN("Failed to add server bypass route: {}", ec.message());
+      } else {
+        LOG_INFO("Added bypass route for VPN server {} via {} (metric {})",
+                 g_tunnel_config.server_address, state->default_gateway, bypass.metric);
+      }
+    } else {
+      LOG_WARN("Could not determine current default gateway for bypass route");
+    }
+
+    // Add default route via VPN tunnel with low metric (high priority)
+    if (!route_manager->add_default_route(device_name, "", 5, ec)) {
+      LOG_WARN("Failed to set default route via VPN: {}", ec.message());
+    } else {
+      LOG_INFO("Default route configured via {} with metric 5", device_name);
+    }
+  }
+
+  g_routes_configured = true;
+  LOG_INFO("========================================");
+  LOG_INFO("ROUTE CONFIGURATION COMPLETE");
+  LOG_INFO("========================================");
+}
+
+void cleanup_routes() {
+  if (!g_routes_configured || !g_tunnel) {
+    return;
+  }
+
+  LOG_INFO("Cleaning up routes...");
+  auto* route_manager = g_tunnel->route_manager();
+  if (route_manager) {
+    route_manager->cleanup();
+    LOG_INFO("Routes cleaned up");
+  }
+
+  g_routes_configured = false;
+}
+
+// ============================================================================
+// Windows Firewall Management
+// ============================================================================
+
+static std::string g_firewall_rule_name;
+
+void configure_firewall_rule(std::uint16_t port) {
+  // Create a firewall rule to allow incoming UDP traffic on the VPN port
+  // This is needed because Windows Firewall may block incoming UDP after routing changes
+
+  g_firewall_rule_name = "VEIL_VPN_UDP_" + std::to_string(port);
+
+  // First, try to delete any existing rule with the same name
+  std::string delete_cmd = "netsh advfirewall firewall delete rule name=\"" + g_firewall_rule_name + "\" >nul 2>&1";
+  system(delete_cmd.c_str());
+
+  // Create the inbound rule for UDP
+  std::string add_cmd = "netsh advfirewall firewall add rule "
+                        "name=\"" + g_firewall_rule_name + "\" "
+                        "dir=in action=allow protocol=UDP localport=" + std::to_string(port) + " "
+                        "enable=yes profile=any";
+
+  LOG_INFO("Adding Windows Firewall rule for UDP port {}", port);
+  LOG_DEBUG("Firewall command: {}", add_cmd);
+
+  int result = system(add_cmd.c_str());
+  if (result == 0) {
+    LOG_INFO("Firewall rule '{}' created successfully", g_firewall_rule_name);
+  } else {
+    LOG_WARN("Failed to create firewall rule (exit code: {}). This may affect incoming VPN packets.", result);
+    LOG_WARN("You may need to manually add a firewall rule for UDP port {}", port);
+  }
+}
+
+void cleanup_firewall_rule() {
+  if (g_firewall_rule_name.empty()) {
+    return;
+  }
+
+  std::string delete_cmd = "netsh advfirewall firewall delete rule name=\"" + g_firewall_rule_name + "\" >nul 2>&1";
+  LOG_INFO("Removing Windows Firewall rule '{}'", g_firewall_rule_name);
+  system(delete_cmd.c_str());
+  g_firewall_rule_name.clear();
+}
+
+// ============================================================================
 // IPC Message Handler
 // ============================================================================
 
@@ -439,6 +595,11 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
             g_tunnel_config.tun.mtu = command.config.tun_mtu > 0
                 ? command.config.tun_mtu : 1400;
 
+            // Store routing configuration for later setup
+            g_route_all_traffic = command.config.route_all_traffic;
+            g_custom_routes = command.config.custom_routes;
+            g_routes_configured = false;
+
             // Log configuration for debugging
             LOG_INFO("Connecting to {}:{}", g_tunnel_config.server_address, g_tunnel_config.server_port);
             if (!g_tunnel_config.key_file.empty()) {
@@ -454,6 +615,16 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
             LOG_DEBUG("Creating tunnel instance with configuration...");
             g_tunnel = std::make_unique<tunnel::Tunnel>(g_tunnel_config);
 
+            // Set up state change callback to configure routes when connected
+            g_tunnel->on_state_change([](tunnel::ConnectionState old_state, tunnel::ConnectionState new_state) {
+              LOG_INFO("Tunnel state changed: {} -> {}",
+                       static_cast<int>(old_state), static_cast<int>(new_state));
+              if (new_state == tunnel::ConnectionState::kConnected && !g_routes_configured) {
+                // Configure routes now that the TUN device is ready
+                configure_routes();
+              }
+            });
+
             LOG_DEBUG("Initializing tunnel...");
             std::error_code ec;
             if (!g_tunnel->initialize(ec)) {
@@ -467,6 +638,18 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
               g_tunnel.reset();
             } else {
               LOG_INFO("Tunnel initialized successfully");
+
+              // Configure Windows Firewall to allow incoming UDP packets
+              // This is critical for receiving VPN responses after routing is configured
+              // Use the actual bound port from the socket (local_port may be 0 for random assignment)
+              std::uint16_t actual_port = g_tunnel->udp_local_port();
+              LOG_INFO("UDP socket bound to local port {}", actual_port);
+              if (actual_port > 0) {
+                configure_firewall_rule(actual_port);
+              } else {
+                LOG_WARN("Could not determine actual UDP port, skipping firewall rule");
+              }
+
               LOG_DEBUG("Starting tunnel thread...");
 
               // Start tunnel in background thread
@@ -479,6 +662,11 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
                 LOG_INFO("========================================");
                 LOG_INFO("VPN TUNNEL STOPPED");
                 LOG_INFO("========================================");
+
+                // Clean up routes and firewall rules when tunnel stops
+                cleanup_routes();
+                cleanup_firewall_rule();
+
                 g_connected = false;
 
                 // Broadcast disconnection event
@@ -521,6 +709,11 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
           LOG_DEBUG("Received DisconnectCommand");
           if (g_connected && g_tunnel) {
             LOG_INFO("Stopping VPN tunnel...");
+
+            // Clean up routes and firewall rules before stopping the tunnel
+            cleanup_routes();
+            cleanup_firewall_rule();
+
             g_tunnel->stop();
             if (g_tunnel_thread && g_tunnel_thread->joinable()) {
               g_tunnel_thread->join();

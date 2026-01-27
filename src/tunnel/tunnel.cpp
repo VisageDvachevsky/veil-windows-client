@@ -159,7 +159,13 @@ bool Tunnel::initialize(std::error_code& ec) {
     LOG_ERROR("Failed to open UDP socket: {}", ec.message());
     return false;
   }
-  LOG_INFO("UDP socket opened on port {}", config_.local_port);
+  // Log both requested and actual bound port (they differ if requested port was 0)
+  std::uint16_t actual_port = udp_socket_.local_port();
+  if (config_.local_port == 0) {
+    LOG_INFO("UDP socket opened on random port {} (requested port 0)", actual_port);
+  } else {
+    LOG_INFO("UDP socket opened on port {}", actual_port);
+  }
 
   // Create event loop.
   event_loop_ = std::make_unique<transport::EventLoop>(config_.event_loop, now_fn_);
@@ -243,6 +249,12 @@ void Tunnel::run() {
   // Main event loop.
   std::array<std::uint8_t, kMaxPacketSize> tun_buffer{};
 
+  // Diagnostic counters for periodic logging
+  std::uint64_t loop_iterations = 0;
+  std::uint64_t last_logged_tx = 0;
+  std::uint64_t last_logged_rx = 0;
+  auto last_diagnostic_log = now_fn_();
+
   while (running_.load()
 #ifdef _WIN32
          && !console_handler.should_terminate()
@@ -251,6 +263,7 @@ void Tunnel::run() {
 #endif
   ) {
     std::error_code ec;
+    loop_iterations++;
 
     // Check TUN device for incoming packets (only if device is open).
     if (tun_device_.is_open()) {
@@ -264,11 +277,36 @@ void Tunnel::run() {
     }
 
     // Poll UDP socket for incoming packets.
-    udp_socket_.poll(
+    if (!udp_socket_.poll(
         [this](const transport::UdpPacket& pkt) {
           on_udp_packet(pkt.data, pkt.remote);
         },
-        10, ec);
+        10, ec)) {
+      LOG_ERROR("UDP poll failed: {}", ec.message());
+    }
+
+    // Periodic diagnostic logging (every 5 seconds when connected)
+    auto now = now_fn_();
+    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_diagnostic_log);
+    if (elapsed.count() >= 5 && state_.load() == ConnectionState::kConnected) {
+      last_diagnostic_log = now;
+
+      // Log traffic stats if they changed
+      if (stats_.udp_packets_sent != last_logged_tx || stats_.udp_packets_received != last_logged_rx) {
+        LOG_INFO("Tunnel stats: packets_sent={}, packets_received={}, loops={}, decrypt_errors={}, encrypt_errors={}",
+                 stats_.udp_packets_sent, stats_.udp_packets_received, loop_iterations,
+                 stats_.decrypt_errors, stats_.encrypt_errors);
+        last_logged_tx = stats_.udp_packets_sent;
+        last_logged_rx = stats_.udp_packets_received;
+      }
+
+      // Warn if we're sending but not receiving
+      if (stats_.udp_packets_sent > 10 && stats_.udp_packets_received == 0) {
+        LOG_WARN("WARNING: Sending packets but receiving none! Check firewall and server connectivity.");
+        LOG_WARN("  - Packets sent: {}, Packets received: {}", stats_.udp_packets_sent, stats_.udp_packets_received);
+        LOG_WARN("  - Server: {}:{}", config_.server_address, config_.server_port);
+      }
+    }
 
     // Process session timers if we have an active session.
     if (session_) {

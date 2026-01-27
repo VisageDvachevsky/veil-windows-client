@@ -105,6 +105,13 @@ void log_retransmit_error(const std::error_code& ec) {
   LOG_WARN("Failed to retransmit to client: {}", ec.message());
 }
 
+void log_decryption_failure(std::uint64_t session_id, const std::string& host,
+                            std::uint16_t port, std::size_t size) {
+  LOG_WARN("Failed to decrypt packet from session {} ({}:{}), size={}. "
+           "Possible causes: key mismatch, replay attack, or corrupted packet.",
+           session_id, host, port, size);
+}
+
 void log_new_client(const std::string& host, std::uint16_t port, std::uint64_t session_id) {
   LOG_INFO("New client connected from {}:{}, session {}", host, port, session_id);
 
@@ -401,11 +408,16 @@ int main(int argc, char* argv[]) {
             session->bytes_received += pkt.data.size();
 
             if (session->transport) {
+              LOG_DEBUG("Processing packet from session {} ({}:{}), size={}",
+                        session->session_id, pkt.remote.host, pkt.remote.port, pkt.data.size());
               auto frames = session->transport->decrypt_packet(pkt.data);
               if (frames) {
+                LOG_DEBUG("Decrypted {} frame(s) from session {}", frames->size(), session->session_id);
                 for (const auto& frame : *frames) {
                   if (frame.kind == mux::FrameKind::kData) {
                     // Write to TUN device
+                    LOG_DEBUG("Writing {} bytes to TUN from session {}",
+                              frame.data.payload.size(), session->session_id);
                     if (!tun_device.write(frame.data.payload, ec)) {
                       log_tun_write_error(ec);
                     }
@@ -413,9 +425,16 @@ int main(int argc, char* argv[]) {
                     session->transport->process_ack(frame.ack);
                   }
                 }
+              } else {
+                // Log decryption failure for diagnostics
+                log_decryption_failure(session->session_id, pkt.remote.host,
+                                       pkt.remote.port, pkt.data.size());
               }
             }
           } else {
+            // Log when packet doesn't match any existing session
+            LOG_DEBUG("No session found for endpoint {}:{}, treating as potential handshake",
+                      pkt.remote.host, pkt.remote.port);
             // New connection - handle handshake
             auto hs_result = responder.handle_init(pkt.data);
             if (hs_result) {
@@ -442,6 +461,11 @@ int main(int argc, char* argv[]) {
     if (tun_read > 0) {
       // Parse IP header to find destination
       if (tun_read >= 20) {
+        // Extract source IP from IPv4 header (bytes 12-15)
+        std::uint32_t src_ip = (static_cast<std::uint32_t>(buffer[12]) << 24) |
+                               (static_cast<std::uint32_t>(buffer[13]) << 16) |
+                               (static_cast<std::uint32_t>(buffer[14]) << 8) |
+                               static_cast<std::uint32_t>(buffer[15]);
         // Extract destination IP from IPv4 header (bytes 16-19)
         std::uint32_t dst_ip = (static_cast<std::uint32_t>(buffer[16]) << 24) |
                                (static_cast<std::uint32_t>(buffer[17]) << 16) |
@@ -449,14 +473,22 @@ int main(int argc, char* argv[]) {
                                static_cast<std::uint32_t>(buffer[19]);
 
         // Convert to string
-        char ip_str[INET_ADDRSTRLEN];
-        struct in_addr addr {};
-        addr.s_addr = htonl(dst_ip);
-        inet_ntop(AF_INET, &addr, ip_str, sizeof(ip_str));
+        char src_ip_str[INET_ADDRSTRLEN];
+        char dst_ip_str[INET_ADDRSTRLEN];
+        struct in_addr src_addr {};
+        struct in_addr dst_addr {};
+        src_addr.s_addr = htonl(src_ip);
+        dst_addr.s_addr = htonl(dst_ip);
+        inet_ntop(AF_INET, &src_addr, src_ip_str, sizeof(src_ip_str));
+        inet_ntop(AF_INET, &dst_addr, dst_ip_str, sizeof(dst_ip_str));
+
+        LOG_DEBUG("TUN read: {} bytes, {} -> {}", tun_read, src_ip_str, dst_ip_str);
 
         // Find session by tunnel IP
-        auto* session = session_table.find_by_tunnel_ip(ip_str);
+        auto* session = session_table.find_by_tunnel_ip(dst_ip_str);
         if (session != nullptr && session->transport) {
+          LOG_DEBUG("Routing {} bytes to session {} ({}:{})",
+                    tun_read, session->session_id, session->endpoint.host, session->endpoint.port);
           // Encrypt and send
           auto packets = session->transport->encrypt_data(
               std::span<const std::uint8_t>(buffer.data(), static_cast<std::size_t>(tun_read)));
@@ -470,6 +502,8 @@ int main(int argc, char* argv[]) {
               g_stats.total_bytes_sent += pkt.size();
             }
           }
+        } else {
+          LOG_DEBUG("No session found for tunnel IP {}, packet dropped", dst_ip_str);
         }
       }
     }
