@@ -291,6 +291,25 @@ int main(int argc, char* argv[]) {
       LOG_ERROR("{}", error_msg);
       return EXIT_FAILURE;
     }
+  } else {
+    // PSK is required for server operation
+    cli::print_error("Pre-shared key file is required but not specified");
+    std::cerr << '\n';
+    std::cerr << "The server requires a pre-shared key (PSK) for secure client authentication." << '\n';
+    std::cerr << '\n';
+    std::cerr << "To generate a new 32-byte PSK file:" << '\n';
+    std::cerr << "  head -c 32 /dev/urandom > /etc/veil/server.key" << '\n';
+    std::cerr << '\n';
+    std::cerr << "Then start the server with:" << '\n';
+    std::cerr << "  veil-server -k /etc/veil/server.key" << '\n';
+    std::cerr << '\n';
+    std::cerr << "Or specify it in your config file:" << '\n';
+    std::cerr << "  [crypto]" << '\n';
+    std::cerr << "  preshared_key_file = /etc/veil/server.key" << '\n';
+    std::cerr << '\n';
+    std::cerr << "Remember to copy this key securely to all clients!" << '\n';
+    LOG_ERROR("Pre-shared key file not specified. Use -k/--key option or config file.");
+    return EXIT_FAILURE;
   }
 
   // Open TUN device
