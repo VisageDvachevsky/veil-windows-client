@@ -105,6 +105,13 @@ void log_retransmit_error(const std::error_code& ec) {
   LOG_WARN("Failed to retransmit to client: {}", ec.message());
 }
 
+void log_decryption_failure(std::uint64_t session_id, const std::string& host,
+                            std::uint16_t port, std::size_t size) {
+  LOG_WARN("Failed to decrypt packet from session {} ({}:{}), size={}. "
+           "Possible causes: key mismatch, replay attack, or corrupted packet.",
+           session_id, host, port, size);
+}
+
 void log_new_client(const std::string& host, std::uint16_t port, std::uint64_t session_id) {
   LOG_INFO("New client connected from {}:{}, session {}", host, port, session_id);
 
@@ -420,9 +427,8 @@ int main(int argc, char* argv[]) {
                 }
               } else {
                 // Log decryption failure for diagnostics
-                LOG_WARN("Failed to decrypt packet from session {} ({}:{}), size={}. "
-                         "Possible causes: key mismatch, replay attack, or corrupted packet.",
-                         session->session_id, pkt.remote.host, pkt.remote.port, pkt.data.size());
+                log_decryption_failure(session->session_id, pkt.remote.host,
+                                       pkt.remote.port, pkt.data.size());
               }
             }
           } else {
