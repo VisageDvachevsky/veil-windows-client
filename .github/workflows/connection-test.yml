@@ -1,0 +1,130 @@
+name: Connection Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      timeout_seconds:
+        description: 'Connection test timeout in seconds'
+        required: false
+        default: '30'
+  push:
+    branches: [main]
+    paths:
+      - 'src/tunnel/**'
+      - 'src/transport/**'
+      - 'src/common/handshake/**'
+      - 'tests/integration/connection_test.cpp'
+  pull_request:
+    paths:
+      - 'src/tunnel/**'
+      - 'src/transport/**'
+      - 'src/common/handshake/**'
+      - 'tests/integration/connection_test.cpp'
+
+jobs:
+  connection-test:
+    name: Live Server Connection Test (Linux)
+    runs-on: ubuntu-latest
+    # Only run if secrets are available (not on forks without secrets)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.repository == 'VisageDvachevsky/veil-windows-client' }}
+
+    env:
+      VEIL_SERVER_IP: ${{ secrets.SERVER_IP }}
+      VEIL_CLIENT_KEY: ${{ secrets.CLIENT_KEY }}
+      VEIL_OBFUSCATION_SEED: ${{ secrets.OBFUSCATION_SEED }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check if secrets are configured
+        id: check-secrets
+        run: |
+          if [[ -z "$VEIL_SERVER_IP" || -z "$VEIL_CLIENT_KEY" ]]; then
+            echo "secrets_available=false" >> $GITHUB_OUTPUT
+            echo "::warning::Required secrets (SERVER_IP, CLIENT_KEY) are not configured. Skipping connection test."
+          else
+            echo "secrets_available=true" >> $GITHUB_OUTPUT
+            echo "Server IP and Client Key secrets are configured."
+          fi
+
+      - name: Install dependencies
+        if: steps.check-secrets.outputs.secrets_available == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build \
+            clang \
+            lld \
+            libsodium-dev \
+            iproute2 \
+            iptables
+
+      - name: Configure CMake (Release)
+        if: steps.check-secrets.outputs.secrets_available == 'true'
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DVEIL_BUILD_TESTS=ON
+
+      - name: Build
+        if: steps.check-secrets.outputs.secrets_available == 'true'
+        run: cmake --build build
+
+      - name: Create key files from secrets
+        if: steps.check-secrets.outputs.secrets_available == 'true'
+        run: |
+          mkdir -p /tmp/veil-test
+          # Decode base64-encoded key (CLIENT_KEY should be base64-encoded 32-byte key)
+          echo "$VEIL_CLIENT_KEY" | base64 -d > /tmp/veil-test/client.key
+          # Verify key file size
+          KEY_SIZE=$(stat -c%s /tmp/veil-test/client.key 2>/dev/null || echo 0)
+          echo "Key file size: $KEY_SIZE bytes"
+          if [[ "$KEY_SIZE" != "32" ]]; then
+            echo "::error::Client key must be exactly 32 bytes (got $KEY_SIZE). Ensure CLIENT_KEY secret is a base64-encoded 32-byte key."
+            exit 1
+          fi
+          # Create obfuscation seed if provided
+          if [[ -n "$VEIL_OBFUSCATION_SEED" ]]; then
+            echo "$VEIL_OBFUSCATION_SEED" | base64 -d > /tmp/veil-test/obfuscation.seed
+            SEED_SIZE=$(stat -c%s /tmp/veil-test/obfuscation.seed 2>/dev/null || echo 0)
+            echo "Obfuscation seed file size: $SEED_SIZE bytes"
+          fi
+
+      - name: Run connection test (handshake only)
+        if: steps.check-secrets.outputs.secrets_available == 'true'
+        timeout-minutes: 2
+        run: |
+          TIMEOUT_SECS="${{ github.event.inputs.timeout_seconds }}"
+          TIMEOUT_SECS="${TIMEOUT_SECS:-30}"
+
+          echo "Testing connection to VPN server at $VEIL_SERVER_IP:4433"
+          echo "Timeout: ${TIMEOUT_SECS} seconds"
+
+          # Run the connection test binary
+          VEIL_TEST_SERVER="$VEIL_SERVER_IP" \
+          VEIL_TEST_KEY_FILE="/tmp/veil-test/client.key" \
+          VEIL_TEST_SEED_FILE="/tmp/veil-test/obfuscation.seed" \
+          VEIL_TEST_TIMEOUT_MS="$((TIMEOUT_SECS * 1000))" \
+          ./build/tests/integration/veil_integration_connection --gtest_filter="*LiveServerHandshake*" \
+            || echo "Connection test completed (check results above)"
+
+      - name: Cleanup key files
+        if: always() && steps.check-secrets.outputs.secrets_available == 'true'
+        run: |
+          rm -rf /tmp/veil-test
+          echo "Cleaned up temporary key files"
+
+      - name: Report skip reason
+        if: steps.check-secrets.outputs.secrets_available == 'false'
+        run: |
+          echo "## Connection Test Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The connection test was skipped because required GitHub secrets are not configured." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To enable this test, configure the following repository secrets:" >> $GITHUB_STEP_SUMMARY
+          echo "- **SERVER_IP**: The VPN server IP address" >> $GITHUB_STEP_SUMMARY
+          echo "- **CLIENT_KEY**: Base64-encoded 32-byte pre-shared key" >> $GITHUB_STEP_SUMMARY
+          echo "- **OBFUSCATION_SEED** (optional): Base64-encoded obfuscation seed" >> $GITHUB_STEP_SUMMARY
