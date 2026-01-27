@@ -50,6 +50,10 @@ class UdpSocket {
   int fd() const { return fd_; }
 #endif
 
+  // Get the actual local port the socket is bound to.
+  // Returns 0 if the socket is not open or on error.
+  std::uint16_t local_port() const;
+
  private:
 #ifdef _WIN32
   // On Windows, we use SOCKET type (unsigned __int64 on 64-bit, unsigned int on 32-bit).

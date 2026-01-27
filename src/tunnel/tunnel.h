@@ -149,6 +149,9 @@ class Tunnel {
   // Get the route manager.
   tun::RouteManager* route_manager() { return &route_manager_; }
 
+  // Get the UDP socket's actual local port (after binding).
+  std::uint16_t udp_local_port() const { return udp_socket_.local_port(); }
+
  protected:
   // Called when a packet is received from the TUN device.
   virtual void on_tun_packet(std::span<const std::uint8_t> packet);

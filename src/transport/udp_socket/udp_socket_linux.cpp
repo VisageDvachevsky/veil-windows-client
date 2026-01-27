@@ -277,6 +277,21 @@ void UdpSocket::close() {
   }
 }
 
+std::uint16_t UdpSocket::local_port() const {
+  if (fd_ < 0) {
+    return 0;
+  }
+
+  sockaddr_in addr{};
+  socklen_t addr_len = sizeof(addr);
+  if (getsockname(fd_, reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
+    LOG_WARN("[UDP] getsockname() failed: errno {}", errno);
+    return 0;
+  }
+
+  return ntohs(addr.sin_port);
+}
+
 }  // namespace veil::transport
 
 #endif  // !_WIN32

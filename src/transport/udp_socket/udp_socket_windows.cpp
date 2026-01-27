@@ -225,6 +225,7 @@ bool UdpSocket::poll(const ReceiveHandler& handler, int timeout_ms, std::error_c
   SOCKET s = static_cast<SOCKET>(fd_);
   if (s == INVALID_SOCKET) {
     ec = std::make_error_code(std::errc::bad_file_descriptor);
+    LOG_ERROR("[UDP] poll() called on invalid socket");
     return false;
   }
 
@@ -245,6 +246,7 @@ bool UdpSocket::poll(const ReceiveHandler& handler, int timeout_ms, std::error_c
       return true;  // Interrupted, but not an error.
     }
     ec = std::error_code(err, std::system_category());
+    LOG_ERROR("[UDP] select() failed: WSA error {}, message: {}", err, ec.message());
     return false;
   }
 
@@ -252,29 +254,41 @@ bool UdpSocket::poll(const ReceiveHandler& handler, int timeout_ms, std::error_c
     return true;  // Timeout, no data.
   }
 
-  // Read available data.
-  std::array<char, 65535> buffer{};
-  sockaddr_in src{};
-  int src_len = sizeof(src);
-  const int read = ::recvfrom(s, buffer.data(), static_cast<int>(buffer.size()), 0,
-                               reinterpret_cast<sockaddr*>(&src), &src_len);
-  if (read == SOCKET_ERROR) {
-    int err = WSAGetLastError();
-    if (err == WSAEWOULDBLOCK || err == WSAEINTR) {
-      return true;  // No data available right now.
+  // Read available data - may have multiple packets pending
+  int packets_read = 0;
+  while (true) {
+    std::array<char, 65535> buffer{};
+    sockaddr_in src{};
+    int src_len = sizeof(src);
+    const int read = ::recvfrom(s, buffer.data(), static_cast<int>(buffer.size()), 0,
+                                 reinterpret_cast<sockaddr*>(&src), &src_len);
+    if (read == SOCKET_ERROR) {
+      int err = WSAGetLastError();
+      if (err == WSAEWOULDBLOCK || err == WSAEINTR) {
+        break;  // No more data available right now.
+      }
+      // Log other errors but don't fail if we already read some packets
+      if (packets_read == 0) {
+        ec = std::error_code(err, std::system_category());
+        LOG_ERROR("[UDP] recvfrom() failed: WSA error {}, message: {}", err, ec.message());
+        return false;
+      }
+      LOG_WARN("[UDP] recvfrom() error after reading {} packets: WSA error {}", packets_read, err);
+      break;
     }
-    ec = std::error_code(err, std::system_category());
-    return false;
-  }
 
-  if (read > 0) {
-    UdpEndpoint remote{};
-    fill_endpoint(src, remote);
-    LOG_INFO("[UDP] Received {} bytes from {}:{}", read, remote.host, remote.port);
-    handler(UdpPacket{
-        std::vector<std::uint8_t>(reinterpret_cast<std::uint8_t*>(buffer.data()),
-                                   reinterpret_cast<std::uint8_t*>(buffer.data()) + read),
-        remote});
+    if (read > 0) {
+      UdpEndpoint remote{};
+      fill_endpoint(src, remote);
+      LOG_INFO("[UDP] Received {} bytes from {}:{}", read, remote.host, remote.port);
+      handler(UdpPacket{
+          std::vector<std::uint8_t>(reinterpret_cast<std::uint8_t*>(buffer.data()),
+                                     reinterpret_cast<std::uint8_t*>(buffer.data()) + read),
+          remote});
+      packets_read++;
+    } else {
+      break;  // No data read
+    }
   }
 
   return true;
@@ -286,6 +300,22 @@ void UdpSocket::close() {
     fd_ = static_cast<std::uintptr_t>(~0ULL);  // Set to INVALID_SOCKET
     WSACleanup();
   }
+}
+
+std::uint16_t UdpSocket::local_port() const {
+  SOCKET s = static_cast<SOCKET>(fd_);
+  if (s == INVALID_SOCKET) {
+    return 0;
+  }
+
+  sockaddr_in addr{};
+  int addr_len = sizeof(addr);
+  if (getsockname(s, reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
+    LOG_WARN("[UDP] getsockname() failed: WSA error {}", WSAGetLastError());
+    return 0;
+  }
+
+  return ntohs(addr.sin_port);
 }
 
 }  // namespace veil::transport

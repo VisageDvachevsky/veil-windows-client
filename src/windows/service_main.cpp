@@ -60,6 +60,8 @@ void stop_service();
 void handle_ipc_message(const ipc::Message& msg, int client_fd);
 void configure_routes();
 void cleanup_routes();
+void configure_firewall_rule(std::uint16_t port);
+void cleanup_firewall_rule();
 
 // ============================================================================
 // Main Entry Point
@@ -471,6 +473,51 @@ void cleanup_routes() {
 }
 
 // ============================================================================
+// Windows Firewall Management
+// ============================================================================
+
+static std::string g_firewall_rule_name;
+
+void configure_firewall_rule(std::uint16_t port) {
+  // Create a firewall rule to allow incoming UDP traffic on the VPN port
+  // This is needed because Windows Firewall may block incoming UDP after routing changes
+
+  g_firewall_rule_name = "VEIL_VPN_UDP_" + std::to_string(port);
+
+  // First, try to delete any existing rule with the same name
+  std::string delete_cmd = "netsh advfirewall firewall delete rule name=\"" + g_firewall_rule_name + "\" >nul 2>&1";
+  system(delete_cmd.c_str());
+
+  // Create the inbound rule for UDP
+  std::string add_cmd = "netsh advfirewall firewall add rule "
+                        "name=\"" + g_firewall_rule_name + "\" "
+                        "dir=in action=allow protocol=UDP localport=" + std::to_string(port) + " "
+                        "enable=yes profile=any";
+
+  LOG_INFO("Adding Windows Firewall rule for UDP port {}", port);
+  LOG_DEBUG("Firewall command: {}", add_cmd);
+
+  int result = system(add_cmd.c_str());
+  if (result == 0) {
+    LOG_INFO("Firewall rule '{}' created successfully", g_firewall_rule_name);
+  } else {
+    LOG_WARN("Failed to create firewall rule (exit code: {}). This may affect incoming VPN packets.", result);
+    LOG_WARN("You may need to manually add a firewall rule for UDP port {}", port);
+  }
+}
+
+void cleanup_firewall_rule() {
+  if (g_firewall_rule_name.empty()) {
+    return;
+  }
+
+  std::string delete_cmd = "netsh advfirewall firewall delete rule name=\"" + g_firewall_rule_name + "\" >nul 2>&1";
+  LOG_INFO("Removing Windows Firewall rule '{}'", g_firewall_rule_name);
+  system(delete_cmd.c_str());
+  g_firewall_rule_name.clear();
+}
+
+// ============================================================================
 // IPC Message Handler
 // ============================================================================
 
@@ -591,6 +638,18 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
               g_tunnel.reset();
             } else {
               LOG_INFO("Tunnel initialized successfully");
+
+              // Configure Windows Firewall to allow incoming UDP packets
+              // This is critical for receiving VPN responses after routing is configured
+              // Use the actual bound port from the socket (local_port may be 0 for random assignment)
+              std::uint16_t actual_port = g_tunnel->udp_local_port();
+              LOG_INFO("UDP socket bound to local port {}", actual_port);
+              if (actual_port > 0) {
+                configure_firewall_rule(actual_port);
+              } else {
+                LOG_WARN("Could not determine actual UDP port, skipping firewall rule");
+              }
+
               LOG_DEBUG("Starting tunnel thread...");
 
               // Start tunnel in background thread
@@ -604,8 +663,9 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
                 LOG_INFO("VPN TUNNEL STOPPED");
                 LOG_INFO("========================================");
 
-                // Clean up routes when tunnel stops
+                // Clean up routes and firewall rules when tunnel stops
                 cleanup_routes();
+                cleanup_firewall_rule();
 
                 g_connected = false;
 
@@ -650,8 +710,9 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
           if (g_connected && g_tunnel) {
             LOG_INFO("Stopping VPN tunnel...");
 
-            // Clean up routes before stopping the tunnel
+            // Clean up routes and firewall rules before stopping the tunnel
             cleanup_routes();
+            cleanup_firewall_rule();
 
             g_tunnel->stop();
             if (g_tunnel_thread && g_tunnel_thread->joinable()) {
