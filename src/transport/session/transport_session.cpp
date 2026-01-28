@@ -163,6 +163,10 @@ std::optional<std::vector<mux::MuxFrame>> TransportSession::decrypt_packet(
     return std::nullopt;
   }
 
+  // Enhanced diagnostic logging for decryption success (Issue #72)
+  LOG_WARN("Decryption SUCCESS: session_id={}, sequence={}, decrypted_size={}",
+           current_session_id_, sequence, decrypted->size());
+
   ++stats_.packets_received;
   stats_.bytes_received += ciphertext.size();
 
@@ -170,12 +174,20 @@ std::optional<std::vector<mux::MuxFrame>> TransportSession::decrypt_packet(
   std::vector<mux::MuxFrame> frames;
   auto frame = mux::MuxCodec::decode(*decrypted);
   if (frame) {
+    // Log frame details for debugging (Issue #72)
+    LOG_WARN("  Frame decoded: kind={}, payload_size={}",
+             static_cast<int>(frame->kind),
+             frame->kind == mux::FrameKind::kData ? frame->data.payload.size() : 0);
     frames.push_back(std::move(*frame));
 
     if (frame->kind == mux::FrameKind::kData) {
       ++stats_.fragments_received;
       recv_ack_bitmap_.ack(sequence);
     }
+  } else {
+    // Log frame decode failure for debugging (Issue #72)
+    LOG_WARN("  Frame decode FAILED: decrypted_size={}, first_byte={:#04x}",
+             decrypted->size(), decrypted->empty() ? 0 : (*decrypted)[0]);
   }
 
   if (sequence > recv_sequence_max_) {

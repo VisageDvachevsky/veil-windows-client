@@ -440,16 +440,23 @@ int main(int argc, char* argv[]) {
                                     pkt.remote.port, pkt.data.size());
               auto frames = session->transport->decrypt_packet(pkt.data);
               if (frames) {
-                LOG_DEBUG("Decrypted {} frame(s) from session {}", frames->size(), session->session_id);
+                // Use WARN level for Issue #72 debugging
+                LOG_WARN("Decrypted {} frame(s) from session {}", frames->size(), session->session_id);
                 for (const auto& frame : *frames) {
+                  LOG_WARN("  Frame kind={}, is_data={}",
+                           static_cast<int>(frame.kind),
+                           frame.kind == mux::FrameKind::kData);
                   if (frame.kind == mux::FrameKind::kData) {
                     // Write to TUN device
-                    LOG_DEBUG("Writing {} bytes to TUN from session {}",
+                    LOG_WARN("Writing {} bytes to TUN from session {}",
                               frame.data.payload.size(), session->session_id);
                     if (!tun_device.write(frame.data.payload, ec)) {
                       log_tun_write_error(ec);
+                    } else {
+                      LOG_WARN("TUN write SUCCESS: {} bytes", frame.data.payload.size());
                     }
                   } else if (frame.kind == mux::FrameKind::kAck) {
+                    LOG_WARN("Processing ACK frame");
                     session->transport->process_ack(frame.ack);
                   }
                 }
