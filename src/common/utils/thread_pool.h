@@ -87,8 +87,11 @@ class ThreadPool {
       -> std::future<std::invoke_result_t<std::decay_t<F>, std::decay_t<Args>...>> {
     using ReturnType = std::invoke_result_t<std::decay_t<F>, std::decay_t<Args>...>;
 
+    // Use lambda instead of std::bind per clang-tidy modernize-avoid-bind
     auto task = std::make_shared<std::packaged_task<ReturnType()>>(
-        std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+        [func = std::forward<F>(f), ... captured_args = std::forward<Args>(args)]() mutable {
+          return func(std::move(captured_args)...);
+        });
 
     std::future<ReturnType> result = task->get_future();
 

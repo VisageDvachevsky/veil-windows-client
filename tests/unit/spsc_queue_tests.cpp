@@ -214,7 +214,7 @@ TEST_F(SpscQueueTest, HighThroughput) {
   if (duration_ms > 0) {
     double throughput = static_cast<double>(num_items) / static_cast<double>(duration_ms) * 1000.0;
     std::cout << "SPSC Queue throughput: " << throughput << " items/sec ("
-              << duration_ms << "ms for " << num_items << " items)" << std::endl;
+              << duration_ms << "ms for " << num_items << " items)\n";
   }
 }
 
@@ -245,6 +245,7 @@ TEST_F(SpscQueueTest, MpmcMultipleProducers) {
 
   // Multiple producer threads
   std::vector<std::thread> producers;
+  producers.reserve(static_cast<std::size_t>(num_producers));
   for (int p = 0; p < num_producers; ++p) {
     producers.emplace_back([&, p]() {
       for (int i = 0; i < items_per_producer; ++i) {

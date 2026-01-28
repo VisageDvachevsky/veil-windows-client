@@ -71,6 +71,7 @@ TEST_F(ThreadPoolTest, SubmitDetached) {
 TEST_F(ThreadPoolTest, MultipleTasks) {
   ThreadPool pool(4);
   std::vector<std::future<int>> futures;
+  futures.reserve(100);
 
   for (int i = 0; i < 100; ++i) {
     futures.push_back(pool.submit([i]() { return i * 2; }));
@@ -136,6 +137,7 @@ TEST_F(ThreadPoolTest, ConcurrentSubmit) {
   ThreadPool pool(4);
   std::atomic<int> sum{0};
   std::vector<std::thread> submitters;
+  submitters.reserve(4);
 
   for (int t = 0; t < 4; ++t) {
     submitters.emplace_back([&pool, &sum]() {
