@@ -4,6 +4,7 @@
 #include <fstream>
 
 #include "common/handshake/handshake_processor.h"
+#include "transport/mux/mux_codec.h"
 #include "common/logging/logger.h"
 #ifndef _WIN32
 #include "common/signal/signal_handler.h"
@@ -400,6 +401,23 @@ void Tunnel::on_udp_packet(std::span<const std::uint8_t> packet,
       }
       stats_.tun_packets_sent++;
       stats_.tun_bytes_sent += frame.data.payload.size();
+
+      // Send ACK back to server (Issue #72 fix)
+      // Without ACKs, the server would keep retransmitting packets
+      auto ack_info = session_->generate_ack(frame.data.stream_id);
+      auto ack_frame = mux::make_ack_frame(ack_info.stream_id, ack_info.ack, ack_info.bitmap);
+      auto ack_encoded = mux::MuxCodec::encode(ack_frame);
+      auto ack_packets = session_->encrypt_data(ack_encoded, 0, false);
+      transport::UdpEndpoint server_endpoint{config_.server_address, config_.server_port};
+      for (const auto& ack_pkt : ack_packets) {
+        std::error_code send_ec;
+        if (!udp_socket_.send(ack_pkt, server_endpoint, send_ec)) {
+          LOG_WARN("Failed to send ACK to server: {}", send_ec.message());
+        } else {
+          LOG_DEBUG("Sent ACK to server: ack={}, bitmap={:#010x}",
+                    ack_info.ack, ack_info.bitmap);
+        }
+      }
     } else if (frame.kind == mux::FrameKind::kAck) {
       session_->process_ack(frame.ack);
     }

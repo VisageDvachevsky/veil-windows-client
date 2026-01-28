@@ -17,6 +17,7 @@
 #include "server/server_config.h"
 #include "server/session_table.h"
 #include "transport/mux/frame.h"
+#include "transport/mux/mux_codec.h"
 #include "transport/session/transport_session.h"
 #include "transport/udp_socket/udp_socket.h"
 #include "tun/routing.h"
@@ -473,6 +474,21 @@ int main(int argc, char* argv[]) {
                       log_tun_write_error(ec);
                     } else {
                       log_tun_write_success(frame.data.payload.size());
+                    }
+
+                    // Send ACK back to client (Issue #72 fix)
+                    // Without ACKs, the client keeps retransmitting packets
+                    auto ack_info = session->transport->generate_ack(frame.data.stream_id);
+                    auto ack_frame = mux::make_ack_frame(ack_info.stream_id, ack_info.ack, ack_info.bitmap);
+                    auto ack_encoded = mux::MuxCodec::encode(ack_frame);
+                    auto ack_packets = session->transport->encrypt_data(ack_encoded, 0, false);
+                    for (const auto& ack_pkt : ack_packets) {
+                      if (!udp_socket.send(ack_pkt, pkt.remote, ec)) {
+                        LOG_WARN("Failed to send ACK to client: {}", ec.message());
+                      } else {
+                        LOG_DEBUG("Sent ACK to client: ack={}, bitmap={:#010x}",
+                                  ack_info.ack, ack_info.bitmap);
+                      }
                     }
                   } else if (frame.kind == mux::FrameKind::kAck) {
                     log_ack_processing();
