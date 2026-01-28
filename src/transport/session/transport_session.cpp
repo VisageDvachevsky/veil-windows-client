@@ -235,6 +235,10 @@ std::vector<std::vector<std::uint8_t>> TransportSession::get_retransmit_packets(
 void TransportSession::process_ack(const mux::AckFrame& ack) {
   VEIL_DCHECK_THREAD(thread_checker_);
 
+  // Debug logging for ACK processing (Issue #72)
+  LOG_WARN("process_ack called: stream_id={}, ack={}, bitmap={:#010x}, pending_before={}",
+           ack.stream_id, ack.ack, ack.bitmap, retransmit_buffer_.pending_count());
+
   // Cumulative ACK.
   retransmit_buffer_.acknowledge_cumulative(ack.ack);
 
@@ -247,6 +251,9 @@ void TransportSession::process_ack(const mux::AckFrame& ack) {
       }
     }
   }
+
+  // Debug logging for ACK processing result (Issue #72)
+  LOG_WARN("process_ack done: pending_after={}", retransmit_buffer_.pending_count());
 }
 
 mux::AckFrame TransportSession::generate_ack(std::uint64_t stream_id) {
