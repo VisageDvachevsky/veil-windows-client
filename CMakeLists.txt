@@ -28,3 +28,8 @@ endif()
 if(VEIL_BUILD_TOOLS)
   add_subdirectory(src/tools)
 endif()
+
+option(VEIL_BUILD_EXPERIMENTS "Build experiment programs" OFF)
+if(VEIL_BUILD_EXPERIMENTS)
+  add_subdirectory(experiments)
+endif()

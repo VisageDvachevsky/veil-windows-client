@@ -11,6 +11,10 @@ class ReplayWindow {
   explicit ReplayWindow(std::size_t window_size = 1024);
   bool mark_and_check(std::uint64_t sequence);
 
+  // Getter for diagnostic logging (Issue #72)
+  [[nodiscard]] std::uint64_t highest() const { return highest_; }
+  [[nodiscard]] bool initialized() const { return initialized_; }
+
  private:
   std::size_t window_size_;
   std::uint64_t highest_{0};

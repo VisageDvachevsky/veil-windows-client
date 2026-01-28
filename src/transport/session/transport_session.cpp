@@ -38,20 +38,21 @@ TransportSession::TransportSession(const handshake::HandshakeSession& handshake_
       reorder_buffer_(0, config_.reorder_buffer_size),
       fragment_reassembly_(config_.fragment_buffer_size),
       retransmit_buffer_(config_.retransmit_config, now_fn_) {
-  // Enhanced diagnostic logging for session creation (Issue #69)
-  // Log key fingerprints to help diagnose key mismatch issues between client and server
-  LOG_DEBUG("TransportSession created: session_id={}", current_session_id_);
-  LOG_DEBUG("  send_key_fp={:02x}{:02x}{:02x}{:02x}, send_nonce_fp={:02x}{:02x}{:02x}{:02x}",
-            keys_.send_key[0], keys_.send_key[1], keys_.send_key[2], keys_.send_key[3],
-            keys_.send_nonce[0], keys_.send_nonce[1], keys_.send_nonce[2], keys_.send_nonce[3]);
-  LOG_DEBUG("  recv_key_fp={:02x}{:02x}{:02x}{:02x}, recv_nonce_fp={:02x}{:02x}{:02x}{:02x}",
-            keys_.recv_key[0], keys_.recv_key[1], keys_.recv_key[2], keys_.recv_key[3],
-            keys_.recv_nonce[0], keys_.recv_nonce[1], keys_.recv_nonce[2], keys_.recv_nonce[3]);
-  LOG_DEBUG("  send_seq_obfuscation_key_fp={:02x}{:02x}{:02x}{:02x}, recv_seq_obfuscation_key_fp={:02x}{:02x}{:02x}{:02x}",
-            send_seq_obfuscation_key_[0], send_seq_obfuscation_key_[1],
-            send_seq_obfuscation_key_[2], send_seq_obfuscation_key_[3],
-            recv_seq_obfuscation_key_[0], recv_seq_obfuscation_key_[1],
-            recv_seq_obfuscation_key_[2], recv_seq_obfuscation_key_[3]);
+  // Enhanced diagnostic logging for session creation (Issue #69, #72)
+  // Use INFO level so key fingerprints are always logged, not just in verbose mode
+  // This helps diagnose key mismatch issues between client and server
+  LOG_INFO("TransportSession created: session_id={}", current_session_id_);
+  LOG_INFO("  send_key_fp={:02x}{:02x}{:02x}{:02x}, send_nonce_fp={:02x}{:02x}{:02x}{:02x}",
+           keys_.send_key[0], keys_.send_key[1], keys_.send_key[2], keys_.send_key[3],
+           keys_.send_nonce[0], keys_.send_nonce[1], keys_.send_nonce[2], keys_.send_nonce[3]);
+  LOG_INFO("  recv_key_fp={:02x}{:02x}{:02x}{:02x}, recv_nonce_fp={:02x}{:02x}{:02x}{:02x}",
+           keys_.recv_key[0], keys_.recv_key[1], keys_.recv_key[2], keys_.recv_key[3],
+           keys_.recv_nonce[0], keys_.recv_nonce[1], keys_.recv_nonce[2], keys_.recv_nonce[3]);
+  LOG_INFO("  send_seq_obfuscation_key_fp={:02x}{:02x}{:02x}{:02x}, recv_seq_obfuscation_key_fp={:02x}{:02x}{:02x}{:02x}",
+           send_seq_obfuscation_key_[0], send_seq_obfuscation_key_[1],
+           send_seq_obfuscation_key_[2], send_seq_obfuscation_key_[3],
+           recv_seq_obfuscation_key_[0], recv_seq_obfuscation_key_[1],
+           recv_seq_obfuscation_key_[2], recv_seq_obfuscation_key_[3]);
 }
 
 TransportSession::~TransportSession() {
@@ -95,6 +96,22 @@ std::vector<std::vector<std::uint8_t>> TransportSession::encrypt_data(
   return result;
 }
 
+std::vector<std::uint8_t> TransportSession::encrypt_frame(const mux::MuxFrame& frame) {
+  VEIL_DCHECK_THREAD(thread_checker_);
+
+  // Use the existing build_encrypted_packet method which properly encrypts any frame type.
+  // This preserves the frame's original kind (ACK, control, heartbeat, etc.) without wrapping
+  // it in a DATA frame like encrypt_data() does.
+  auto encrypted = build_encrypted_packet(frame);
+
+  // Update statistics for non-data frames (data frame stats are updated in encrypt_data)
+  ++stats_.packets_sent;
+  stats_.bytes_sent += encrypted.size();
+  ++packets_since_rotation_;
+
+  return encrypted;
+}
+
 std::optional<std::vector<mux::MuxFrame>> TransportSession::decrypt_packet(
     std::span<const std::uint8_t> ciphertext) {
   VEIL_DCHECK_THREAD(thread_checker_);
@@ -118,16 +135,24 @@ std::optional<std::vector<mux::MuxFrame>> TransportSession::decrypt_packet(
   // obfuscation here to recover the real sequence for nonce derivation and replay checking.
   const std::uint64_t sequence = crypto::deobfuscate_sequence(obfuscated_sequence, recv_seq_obfuscation_key_);
 
-  // Enhanced diagnostic logging for decryption debugging (Issue #69)
-  LOG_DEBUG("Decrypt attempt: session_id={}, pkt_size={}, obfuscated_seq={:#018x}, deobfuscated_seq={}",
-            current_session_id_, ciphertext.size(), obfuscated_sequence, sequence);
+  // Enhanced diagnostic logging for decryption debugging (Issue #69, #72)
+  // Use WARN level temporarily to trace decryption flow in production
+  LOG_WARN("Decrypt attempt: session_id={}, pkt_size={}, obfuscated_seq={:#018x}, deobfuscated_seq={}",
+           current_session_id_, ciphertext.size(), obfuscated_sequence, sequence);
+  LOG_WARN("  recv_seq_obfuscation_key_fp={:02x}{:02x}{:02x}{:02x}, first_8_bytes={:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+           recv_seq_obfuscation_key_[0], recv_seq_obfuscation_key_[1],
+           recv_seq_obfuscation_key_[2], recv_seq_obfuscation_key_[3],
+           ciphertext[0], ciphertext[1], ciphertext[2], ciphertext[3],
+           ciphertext[4], ciphertext[5], ciphertext[6], ciphertext[7]);
 
   // Replay check.
   if (!replay_window_.mark_and_check(sequence)) {
-    LOG_DEBUG("Packet replay detected: sequence={}", sequence);
+    LOG_WARN("Packet replay detected or out of window: sequence={}, highest={}",
+             sequence, replay_window_.highest());
     ++stats_.packets_dropped_replay;
     return std::nullopt;
   }
+  LOG_WARN("Replay check passed, proceeding to decryption");
 
   // Derive nonce from sequence.
   const auto nonce = crypto::derive_nonce(keys_.recv_nonce, sequence);
@@ -136,22 +161,27 @@ std::optional<std::vector<mux::MuxFrame>> TransportSession::decrypt_packet(
   auto ciphertext_body = ciphertext.subspan(8);
   auto decrypted = crypto::aead_decrypt(keys_.recv_key, nonce, {}, ciphertext_body);
   if (!decrypted) {
-    // Enhanced error logging for decryption failures (Issue #69)
+    // Enhanced error logging for decryption failures (Issue #69, #72)
+    // Use WARN level so this always appears, not just in verbose mode
     // Log key fingerprints (first 4 bytes) to help diagnose key mismatch issues
-    LOG_DEBUG("Decryption FAILED: session_id={}, sequence={}, ciphertext_size={}, "
-              "recv_key_fp={:02x}{:02x}{:02x}{:02x}, recv_nonce_fp={:02x}{:02x}{:02x}{:02x}",
-              current_session_id_, sequence, ciphertext_body.size(),
-              keys_.recv_key[0], keys_.recv_key[1], keys_.recv_key[2], keys_.recv_key[3],
-              keys_.recv_nonce[0], keys_.recv_nonce[1], keys_.recv_nonce[2], keys_.recv_nonce[3]);
-    // Also log the obfuscation key fingerprint
-    LOG_DEBUG("  recv_seq_obfuscation_key_fp={:02x}{:02x}{:02x}{:02x}, first_pkt_bytes={:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-              recv_seq_obfuscation_key_[0], recv_seq_obfuscation_key_[1],
-              recv_seq_obfuscation_key_[2], recv_seq_obfuscation_key_[3],
-              ciphertext[0], ciphertext[1], ciphertext[2], ciphertext[3],
-              ciphertext[4], ciphertext[5], ciphertext[6], ciphertext[7]);
+    LOG_WARN("Decryption FAILED: session_id={}, sequence={}, ciphertext_size={}, "
+             "recv_key_fp={:02x}{:02x}{:02x}{:02x}, recv_nonce_fp={:02x}{:02x}{:02x}{:02x}",
+             current_session_id_, sequence, ciphertext_body.size(),
+             keys_.recv_key[0], keys_.recv_key[1], keys_.recv_key[2], keys_.recv_key[3],
+             keys_.recv_nonce[0], keys_.recv_nonce[1], keys_.recv_nonce[2], keys_.recv_nonce[3]);
+    // Also log the obfuscation key fingerprint and packet header
+    LOG_WARN("  recv_seq_obfuscation_key_fp={:02x}{:02x}{:02x}{:02x}, first_pkt_bytes={:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+             recv_seq_obfuscation_key_[0], recv_seq_obfuscation_key_[1],
+             recv_seq_obfuscation_key_[2], recv_seq_obfuscation_key_[3],
+             ciphertext[0], ciphertext[1], ciphertext[2], ciphertext[3],
+             ciphertext[4], ciphertext[5], ciphertext[6], ciphertext[7]);
     ++stats_.packets_dropped_decrypt;
     return std::nullopt;
   }
+
+  // Enhanced diagnostic logging for decryption success (Issue #72)
+  LOG_WARN("Decryption SUCCESS: session_id={}, sequence={}, decrypted_size={}",
+           current_session_id_, sequence, decrypted->size());
 
   ++stats_.packets_received;
   stats_.bytes_received += ciphertext.size();
@@ -160,12 +190,20 @@ std::optional<std::vector<mux::MuxFrame>> TransportSession::decrypt_packet(
   std::vector<mux::MuxFrame> frames;
   auto frame = mux::MuxCodec::decode(*decrypted);
   if (frame) {
+    // Log frame details for debugging (Issue #72)
+    LOG_WARN("  Frame decoded: kind={}, payload_size={}",
+             static_cast<int>(frame->kind),
+             frame->kind == mux::FrameKind::kData ? frame->data.payload.size() : 0);
     frames.push_back(std::move(*frame));
 
     if (frame->kind == mux::FrameKind::kData) {
       ++stats_.fragments_received;
       recv_ack_bitmap_.ack(sequence);
     }
+  } else {
+    // Log frame decode failure for debugging (Issue #72)
+    LOG_WARN("  Frame decode FAILED: decrypted_size={}, first_byte={:#04x}",
+             decrypted->size(), decrypted->empty() ? 0 : (*decrypted)[0]);
   }
 
   if (sequence > recv_sequence_max_) {
@@ -197,6 +235,10 @@ std::vector<std::vector<std::uint8_t>> TransportSession::get_retransmit_packets(
 void TransportSession::process_ack(const mux::AckFrame& ack) {
   VEIL_DCHECK_THREAD(thread_checker_);
 
+  // Debug logging for ACK processing (Issue #72)
+  LOG_WARN("process_ack called: stream_id={}, ack={}, bitmap={:#010x}, pending_before={}",
+           ack.stream_id, ack.ack, ack.bitmap, retransmit_buffer_.pending_count());
+
   // Cumulative ACK.
   retransmit_buffer_.acknowledge_cumulative(ack.ack);
 
@@ -209,6 +251,9 @@ void TransportSession::process_ack(const mux::AckFrame& ack) {
       }
     }
   }
+
+  // Debug logging for ACK processing result (Issue #72)
+  LOG_WARN("process_ack done: pending_after={}", retransmit_buffer_.pending_count());
 }
 
 mux::AckFrame TransportSession::generate_ack(std::uint64_t stream_id) {

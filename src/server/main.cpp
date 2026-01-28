@@ -17,6 +17,7 @@
 #include "server/server_config.h"
 #include "server/session_table.h"
 #include "transport/mux/frame.h"
+#include "transport/mux/mux_codec.h"
 #include "transport/session/transport_session.h"
 #include "transport/udp_socket/udp_socket.h"
 #include "tun/routing.h"
@@ -110,6 +111,45 @@ void log_decryption_failure(std::uint64_t session_id, const std::string& host,
   LOG_WARN("Failed to decrypt packet from session {} ({}:{}), size={}. "
            "Possible causes: key mismatch, replay attack, or corrupted packet.",
            session_id, host, port, size);
+}
+
+// Helper function to log packet processing - avoids clang-tidy bugprone-lambda-function-name
+// warning when LOG_WARN is used inside lambdas (Issue #72 debugging)
+void log_processing_packet(std::uint64_t session_id, const std::string& host,
+                           std::uint16_t port, std::size_t size) {
+  LOG_WARN("Processing packet from session {} ({}:{}), size={}",
+           session_id, host, port, size);
+}
+
+// Additional helper functions for Issue #72 debugging - avoid bugprone-lambda-function-name
+void log_decrypted_frames(std::size_t frame_count, std::uint64_t session_id) {
+  LOG_WARN("Decrypted {} frame(s) from session {}", frame_count, session_id);
+}
+
+void log_frame_info(int kind, bool is_data) {
+  LOG_WARN("  Frame kind={}, is_data={}", kind, is_data);
+}
+
+void log_tun_write_attempt(std::size_t bytes, std::uint64_t session_id) {
+  LOG_WARN("Writing {} bytes to TUN from session {}", bytes, session_id);
+}
+
+void log_tun_write_success(std::size_t bytes) {
+  LOG_WARN("TUN write SUCCESS: {} bytes", bytes);
+}
+
+void log_ack_processing() {
+  LOG_WARN("Processing ACK frame");
+}
+
+// Helper functions for ACK sending logging (Issue #72 fix)
+// These avoid the bugprone-lambda-function-name clang-tidy warning
+void log_ack_send_error(const std::error_code& ec) {
+  LOG_WARN("Failed to send ACK to client: {}", ec.message());
+}
+
+void log_ack_sent([[maybe_unused]] std::uint64_t ack, [[maybe_unused]] std::uint32_t bitmap) {
+  LOG_DEBUG("Sent ACK to client: ack={}, bitmap={:#010x}", ack, bitmap);
 }
 
 void log_new_client(const std::string& host, std::uint16_t port, std::uint64_t session_id) {
@@ -427,20 +467,40 @@ int main(int argc, char* argv[]) {
             session->bytes_received += pkt.data.size();
 
             if (session->transport) {
-              LOG_DEBUG("Processing packet from session {} ({}:{}), size={}",
-                        session->session_id, pkt.remote.host, pkt.remote.port, pkt.data.size());
+              // Use WARN level temporarily for Issue #72 debugging
+              log_processing_packet(session->session_id, pkt.remote.host,
+                                    pkt.remote.port, pkt.data.size());
               auto frames = session->transport->decrypt_packet(pkt.data);
               if (frames) {
-                LOG_DEBUG("Decrypted {} frame(s) from session {}", frames->size(), session->session_id);
+                // Use helper functions for Issue #72 debugging (avoid bugprone-lambda-function-name)
+                log_decrypted_frames(frames->size(), session->session_id);
                 for (const auto& frame : *frames) {
+                  log_frame_info(static_cast<int>(frame.kind),
+                                 frame.kind == mux::FrameKind::kData);
                   if (frame.kind == mux::FrameKind::kData) {
                     // Write to TUN device
-                    LOG_DEBUG("Writing {} bytes to TUN from session {}",
-                              frame.data.payload.size(), session->session_id);
+                    log_tun_write_attempt(frame.data.payload.size(), session->session_id);
                     if (!tun_device.write(frame.data.payload, ec)) {
                       log_tun_write_error(ec);
+                    } else {
+                      log_tun_write_success(frame.data.payload.size());
+                    }
+
+                    // Send ACK back to client (Issue #72 fix)
+                    // Without ACKs, the client keeps retransmitting packets
+                    // IMPORTANT: Use encrypt_frame() instead of encrypt_data() to preserve the ACK frame kind.
+                    // encrypt_data() wraps data in a DATA frame, which would cause the receiver to
+                    // incorrectly interpret the ACK as data and try to write it to TUN.
+                    auto ack_info = session->transport->generate_ack(frame.data.stream_id);
+                    auto ack_frame = mux::make_ack_frame(ack_info.stream_id, ack_info.ack, ack_info.bitmap);
+                    auto ack_packet = session->transport->encrypt_frame(ack_frame);
+                    if (!udp_socket.send(ack_packet, pkt.remote, ec)) {
+                      log_ack_send_error(ec);
+                    } else {
+                      log_ack_sent(ack_info.ack, ack_info.bitmap);
                     }
                   } else if (frame.kind == mux::FrameKind::kAck) {
+                    log_ack_processing();
                     session->transport->process_ack(frame.ack);
                   }
                 }
