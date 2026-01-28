@@ -38,20 +38,21 @@ TransportSession::TransportSession(const handshake::HandshakeSession& handshake_
       reorder_buffer_(0, config_.reorder_buffer_size),
       fragment_reassembly_(config_.fragment_buffer_size),
       retransmit_buffer_(config_.retransmit_config, now_fn_) {
-  // Enhanced diagnostic logging for session creation (Issue #69)
-  // Log key fingerprints to help diagnose key mismatch issues between client and server
-  LOG_DEBUG("TransportSession created: session_id={}", current_session_id_);
-  LOG_DEBUG("  send_key_fp={:02x}{:02x}{:02x}{:02x}, send_nonce_fp={:02x}{:02x}{:02x}{:02x}",
-            keys_.send_key[0], keys_.send_key[1], keys_.send_key[2], keys_.send_key[3],
-            keys_.send_nonce[0], keys_.send_nonce[1], keys_.send_nonce[2], keys_.send_nonce[3]);
-  LOG_DEBUG("  recv_key_fp={:02x}{:02x}{:02x}{:02x}, recv_nonce_fp={:02x}{:02x}{:02x}{:02x}",
-            keys_.recv_key[0], keys_.recv_key[1], keys_.recv_key[2], keys_.recv_key[3],
-            keys_.recv_nonce[0], keys_.recv_nonce[1], keys_.recv_nonce[2], keys_.recv_nonce[3]);
-  LOG_DEBUG("  send_seq_obfuscation_key_fp={:02x}{:02x}{:02x}{:02x}, recv_seq_obfuscation_key_fp={:02x}{:02x}{:02x}{:02x}",
-            send_seq_obfuscation_key_[0], send_seq_obfuscation_key_[1],
-            send_seq_obfuscation_key_[2], send_seq_obfuscation_key_[3],
-            recv_seq_obfuscation_key_[0], recv_seq_obfuscation_key_[1],
-            recv_seq_obfuscation_key_[2], recv_seq_obfuscation_key_[3]);
+  // Enhanced diagnostic logging for session creation (Issue #69, #72)
+  // Use INFO level so key fingerprints are always logged, not just in verbose mode
+  // This helps diagnose key mismatch issues between client and server
+  LOG_INFO("TransportSession created: session_id={}", current_session_id_);
+  LOG_INFO("  send_key_fp={:02x}{:02x}{:02x}{:02x}, send_nonce_fp={:02x}{:02x}{:02x}{:02x}",
+           keys_.send_key[0], keys_.send_key[1], keys_.send_key[2], keys_.send_key[3],
+           keys_.send_nonce[0], keys_.send_nonce[1], keys_.send_nonce[2], keys_.send_nonce[3]);
+  LOG_INFO("  recv_key_fp={:02x}{:02x}{:02x}{:02x}, recv_nonce_fp={:02x}{:02x}{:02x}{:02x}",
+           keys_.recv_key[0], keys_.recv_key[1], keys_.recv_key[2], keys_.recv_key[3],
+           keys_.recv_nonce[0], keys_.recv_nonce[1], keys_.recv_nonce[2], keys_.recv_nonce[3]);
+  LOG_INFO("  send_seq_obfuscation_key_fp={:02x}{:02x}{:02x}{:02x}, recv_seq_obfuscation_key_fp={:02x}{:02x}{:02x}{:02x}",
+           send_seq_obfuscation_key_[0], send_seq_obfuscation_key_[1],
+           send_seq_obfuscation_key_[2], send_seq_obfuscation_key_[3],
+           recv_seq_obfuscation_key_[0], recv_seq_obfuscation_key_[1],
+           recv_seq_obfuscation_key_[2], recv_seq_obfuscation_key_[3]);
 }
 
 TransportSession::~TransportSession() {
@@ -136,19 +137,20 @@ std::optional<std::vector<mux::MuxFrame>> TransportSession::decrypt_packet(
   auto ciphertext_body = ciphertext.subspan(8);
   auto decrypted = crypto::aead_decrypt(keys_.recv_key, nonce, {}, ciphertext_body);
   if (!decrypted) {
-    // Enhanced error logging for decryption failures (Issue #69)
+    // Enhanced error logging for decryption failures (Issue #69, #72)
+    // Use WARN level so this always appears, not just in verbose mode
     // Log key fingerprints (first 4 bytes) to help diagnose key mismatch issues
-    LOG_DEBUG("Decryption FAILED: session_id={}, sequence={}, ciphertext_size={}, "
-              "recv_key_fp={:02x}{:02x}{:02x}{:02x}, recv_nonce_fp={:02x}{:02x}{:02x}{:02x}",
-              current_session_id_, sequence, ciphertext_body.size(),
-              keys_.recv_key[0], keys_.recv_key[1], keys_.recv_key[2], keys_.recv_key[3],
-              keys_.recv_nonce[0], keys_.recv_nonce[1], keys_.recv_nonce[2], keys_.recv_nonce[3]);
-    // Also log the obfuscation key fingerprint
-    LOG_DEBUG("  recv_seq_obfuscation_key_fp={:02x}{:02x}{:02x}{:02x}, first_pkt_bytes={:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-              recv_seq_obfuscation_key_[0], recv_seq_obfuscation_key_[1],
-              recv_seq_obfuscation_key_[2], recv_seq_obfuscation_key_[3],
-              ciphertext[0], ciphertext[1], ciphertext[2], ciphertext[3],
-              ciphertext[4], ciphertext[5], ciphertext[6], ciphertext[7]);
+    LOG_WARN("Decryption FAILED: session_id={}, sequence={}, ciphertext_size={}, "
+             "recv_key_fp={:02x}{:02x}{:02x}{:02x}, recv_nonce_fp={:02x}{:02x}{:02x}{:02x}",
+             current_session_id_, sequence, ciphertext_body.size(),
+             keys_.recv_key[0], keys_.recv_key[1], keys_.recv_key[2], keys_.recv_key[3],
+             keys_.recv_nonce[0], keys_.recv_nonce[1], keys_.recv_nonce[2], keys_.recv_nonce[3]);
+    // Also log the obfuscation key fingerprint and packet header
+    LOG_WARN("  recv_seq_obfuscation_key_fp={:02x}{:02x}{:02x}{:02x}, first_pkt_bytes={:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+             recv_seq_obfuscation_key_[0], recv_seq_obfuscation_key_[1],
+             recv_seq_obfuscation_key_[2], recv_seq_obfuscation_key_[3],
+             ciphertext[0], ciphertext[1], ciphertext[2], ciphertext[3],
+             ciphertext[4], ciphertext[5], ciphertext[6], ciphertext[7]);
     ++stats_.packets_dropped_decrypt;
     return std::nullopt;
   }
