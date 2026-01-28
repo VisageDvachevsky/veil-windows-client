@@ -447,7 +447,7 @@ void MainWindow::setupIpcConnections() {
     qDebug() << "[MainWindow] Connection state changed:" << static_cast<int>(state);
 
     // Convert IPC state to GUI state
-    ConnectionState guiState;
+    ConnectionState guiState = ConnectionState::kDisconnected;  // Default to disconnected
     switch (state) {
       case ipc::ConnectionState::kDisconnected:
         qDebug() << "[MainWindow] New state: DISCONNECTED";
