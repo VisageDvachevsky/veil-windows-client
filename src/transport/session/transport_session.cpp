@@ -210,10 +210,11 @@ std::optional<std::vector<mux::MuxFrame>> TransportSession::decrypt_packet(
 
       // Determine if this is a fragment vs complete message:
       // Issue #74: The sender uses msg_id >= 1 for fragmented messages, encoding as (msg_id << 32) | frag_idx.
-      // Non-fragmented messages use msg_id = 0 (raw sequence numbers like 0, 1, 2, ...).
-      // So we can simply check if msg_id > 0 to detect fragments.
+      // Non-fragmented messages use raw sequence numbers (0, 1, 2, ...) which fit in 32 bits.
+      // We detect fragments by checking if the sequence exceeds 32-bit range (upper 32 bits non-zero).
+      // This is equivalent to checking msg_id > 0, but more explicit about the encoding.
       const std::uint64_t reassembly_id = msg_id;  // Use msg_id as reassembly key
-      const bool is_fragment = (msg_id > 0);
+      const bool is_fragment = (frame_seq > 0xFFFFFFFF);
 
       if (is_fragment) {
         // This is a fragment - push to reassembly buffer using msg_id as the key
