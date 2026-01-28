@@ -120,6 +120,27 @@ void log_processing_packet(std::uint64_t session_id, const std::string& host,
            session_id, host, port, size);
 }
 
+// Additional helper functions for Issue #72 debugging - avoid bugprone-lambda-function-name
+void log_decrypted_frames(std::size_t frame_count, std::uint64_t session_id) {
+  LOG_WARN("Decrypted {} frame(s) from session {}", frame_count, session_id);
+}
+
+void log_frame_info(int kind, bool is_data) {
+  LOG_WARN("  Frame kind={}, is_data={}", kind, is_data);
+}
+
+void log_tun_write_attempt(std::size_t bytes, std::uint64_t session_id) {
+  LOG_WARN("Writing {} bytes to TUN from session {}", bytes, session_id);
+}
+
+void log_tun_write_success(std::size_t bytes) {
+  LOG_WARN("TUN write SUCCESS: {} bytes", bytes);
+}
+
+void log_ack_processing() {
+  LOG_WARN("Processing ACK frame");
+}
+
 void log_new_client(const std::string& host, std::uint16_t port, std::uint64_t session_id) {
   LOG_INFO("New client connected from {}:{}, session {}", host, port, session_id);
 
@@ -440,23 +461,21 @@ int main(int argc, char* argv[]) {
                                     pkt.remote.port, pkt.data.size());
               auto frames = session->transport->decrypt_packet(pkt.data);
               if (frames) {
-                // Use WARN level for Issue #72 debugging
-                LOG_WARN("Decrypted {} frame(s) from session {}", frames->size(), session->session_id);
+                // Use helper functions for Issue #72 debugging (avoid bugprone-lambda-function-name)
+                log_decrypted_frames(frames->size(), session->session_id);
                 for (const auto& frame : *frames) {
-                  LOG_WARN("  Frame kind={}, is_data={}",
-                           static_cast<int>(frame.kind),
-                           frame.kind == mux::FrameKind::kData);
+                  log_frame_info(static_cast<int>(frame.kind),
+                                 frame.kind == mux::FrameKind::kData);
                   if (frame.kind == mux::FrameKind::kData) {
                     // Write to TUN device
-                    LOG_WARN("Writing {} bytes to TUN from session {}",
-                              frame.data.payload.size(), session->session_id);
+                    log_tun_write_attempt(frame.data.payload.size(), session->session_id);
                     if (!tun_device.write(frame.data.payload, ec)) {
                       log_tun_write_error(ec);
                     } else {
-                      LOG_WARN("TUN write SUCCESS: {} bytes", frame.data.payload.size());
+                      log_tun_write_success(frame.data.payload.size());
                     }
                   } else if (frame.kind == mux::FrameKind::kAck) {
-                    LOG_WARN("Processing ACK frame");
+                    log_ack_processing();
                     session->transport->process_ack(frame.ack);
                   }
                 }
