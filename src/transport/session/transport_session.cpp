@@ -119,16 +119,24 @@ std::optional<std::vector<mux::MuxFrame>> TransportSession::decrypt_packet(
   // obfuscation here to recover the real sequence for nonce derivation and replay checking.
   const std::uint64_t sequence = crypto::deobfuscate_sequence(obfuscated_sequence, recv_seq_obfuscation_key_);
 
-  // Enhanced diagnostic logging for decryption debugging (Issue #69)
-  LOG_DEBUG("Decrypt attempt: session_id={}, pkt_size={}, obfuscated_seq={:#018x}, deobfuscated_seq={}",
-            current_session_id_, ciphertext.size(), obfuscated_sequence, sequence);
+  // Enhanced diagnostic logging for decryption debugging (Issue #69, #72)
+  // Use WARN level temporarily to trace decryption flow in production
+  LOG_WARN("Decrypt attempt: session_id={}, pkt_size={}, obfuscated_seq={:#018x}, deobfuscated_seq={}",
+           current_session_id_, ciphertext.size(), obfuscated_sequence, sequence);
+  LOG_WARN("  recv_seq_obfuscation_key_fp={:02x}{:02x}{:02x}{:02x}, first_8_bytes={:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+           recv_seq_obfuscation_key_[0], recv_seq_obfuscation_key_[1],
+           recv_seq_obfuscation_key_[2], recv_seq_obfuscation_key_[3],
+           ciphertext[0], ciphertext[1], ciphertext[2], ciphertext[3],
+           ciphertext[4], ciphertext[5], ciphertext[6], ciphertext[7]);
 
   // Replay check.
   if (!replay_window_.mark_and_check(sequence)) {
-    LOG_DEBUG("Packet replay detected: sequence={}", sequence);
+    LOG_WARN("Packet replay detected or out of window: sequence={}, highest={}",
+             sequence, replay_window_.highest());
     ++stats_.packets_dropped_replay;
     return std::nullopt;
   }
+  LOG_WARN("Replay check passed, proceeding to decryption");
 
   // Derive nonce from sequence.
   const auto nonce = crypto::derive_nonce(keys_.recv_nonce, sequence);
