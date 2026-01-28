@@ -131,4 +131,77 @@ TEST(AckBitmapTests, ExactWraparoundBoundary) {
   EXPECT_TRUE(bitmap.is_acked(std::numeric_limits<std::uint64_t>::max()));
 }
 
+// Issue #80: Test SACK bitmap with out-of-order packets
+TEST(AckBitmapTests, OutOfOrderPacketsPopulateBitmap) {
+  mux::AckBitmap bitmap;
+
+  // Sequential packets should build up bitmap
+  bitmap.ack(100);
+  EXPECT_EQ(bitmap.head(), 100);
+  EXPECT_EQ(bitmap.bitmap(), 0x00000000);  // No previous packets
+
+  bitmap.ack(101);
+  EXPECT_EQ(bitmap.head(), 101);
+  EXPECT_EQ(bitmap.bitmap(), 0x00000001);  // Bit 0 represents seq 100
+
+  bitmap.ack(102);
+  EXPECT_EQ(bitmap.head(), 102);
+  EXPECT_EQ(bitmap.bitmap(), 0x00000003);  // Bits 0,1 represent seq 101,100
+
+  // Out-of-order: skip 103, receive 104
+  bitmap.ack(104);
+  EXPECT_EQ(bitmap.head(), 104);
+  // After shift by 2: old bits shifted left, new bit set
+  // Bit 0: seq 103 (NOT received, should be 0)
+  // Bit 1: seq 102 (received, should be 1)
+  // Bit 2: seq 101 (received, should be 1)
+  // Bit 3: seq 100 (received, should be 1)
+  EXPECT_EQ(bitmap.bitmap(), 0x0000000E);  // Binary: 1110
+
+  // Verify individual sequences
+  EXPECT_TRUE(bitmap.is_acked(104));   // head
+  EXPECT_FALSE(bitmap.is_acked(103));  // gap
+  EXPECT_TRUE(bitmap.is_acked(102));
+  EXPECT_TRUE(bitmap.is_acked(101));
+  EXPECT_TRUE(bitmap.is_acked(100));
+
+  // Fill the gap
+  bitmap.ack(103);
+  EXPECT_EQ(bitmap.head(), 104);
+  EXPECT_EQ(bitmap.bitmap(), 0x0000000F);  // All bits set (no gaps)
+  EXPECT_TRUE(bitmap.is_acked(103));
+}
+
+// Issue #80: Test SACK bitmap with multiple gaps
+TEST(AckBitmapTests, MultipleGapsInBitmap) {
+  mux::AckBitmap bitmap;
+
+  // Received: 100, 101, 103, 104, 106
+  // Missing: 102, 105
+  bitmap.ack(100);
+  bitmap.ack(101);
+  bitmap.ack(103);
+  bitmap.ack(104);
+  bitmap.ack(106);
+
+  EXPECT_EQ(bitmap.head(), 106);
+  // Bit encoding (per header: Bit N = sequence (head - 1 - N) was received)
+  // Bit 0: seq 105 (missing)
+  // Bit 1: seq 104 (received)
+  // Bit 2: seq 103 (received)
+  // Bit 3: seq 102 (missing)
+  // Bit 4: seq 101 (received)
+  // Bit 5: seq 100 (received)
+  // Binary: 110110 = 0x36
+  EXPECT_EQ(bitmap.bitmap(), 0x00000036);
+
+  EXPECT_TRUE(bitmap.is_acked(106));
+  EXPECT_FALSE(bitmap.is_acked(105));
+  EXPECT_TRUE(bitmap.is_acked(104));
+  EXPECT_TRUE(bitmap.is_acked(103));
+  EXPECT_FALSE(bitmap.is_acked(102));
+  EXPECT_TRUE(bitmap.is_acked(101));
+  EXPECT_TRUE(bitmap.is_acked(100));
+}
+
 }  // namespace veil::tests
