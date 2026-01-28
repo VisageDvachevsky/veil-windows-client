@@ -96,6 +96,22 @@ std::vector<std::vector<std::uint8_t>> TransportSession::encrypt_data(
   return result;
 }
 
+std::vector<std::uint8_t> TransportSession::encrypt_frame(const mux::MuxFrame& frame) {
+  VEIL_DCHECK_THREAD(thread_checker_);
+
+  // Use the existing build_encrypted_packet method which properly encrypts any frame type.
+  // This preserves the frame's original kind (ACK, control, heartbeat, etc.) without wrapping
+  // it in a DATA frame like encrypt_data() does.
+  auto encrypted = build_encrypted_packet(frame);
+
+  // Update statistics for non-data frames (data frame stats are updated in encrypt_data)
+  ++stats_.packets_sent;
+  stats_.bytes_sent += encrypted.size();
+  ++packets_since_rotation_;
+
+  return encrypted;
+}
+
 std::optional<std::vector<mux::MuxFrame>> TransportSession::decrypt_packet(
     std::span<const std::uint8_t> ciphertext) {
   VEIL_DCHECK_THREAD(thread_checker_);

@@ -414,18 +414,18 @@ void Tunnel::on_udp_packet(std::span<const std::uint8_t> packet,
 
       // Send ACK back to server (Issue #72 fix)
       // Without ACKs, the server would keep retransmitting packets
+      // IMPORTANT: Use encrypt_frame() instead of encrypt_data() to preserve the ACK frame kind.
+      // encrypt_data() wraps data in a DATA frame, which would cause the receiver to
+      // incorrectly interpret the ACK as data and try to write it to TUN.
       auto ack_info = session_->generate_ack(frame.data.stream_id);
       auto ack_frame = mux::make_ack_frame(ack_info.stream_id, ack_info.ack, ack_info.bitmap);
-      auto ack_encoded = mux::MuxCodec::encode(ack_frame);
-      auto ack_packets = session_->encrypt_data(ack_encoded, 0, false);
+      auto ack_packet = session_->encrypt_frame(ack_frame);
       transport::UdpEndpoint server_endpoint{config_.server_address, config_.server_port};
-      for (const auto& ack_pkt : ack_packets) {
-        std::error_code send_ec;
-        if (!udp_socket_.send(ack_pkt, server_endpoint, send_ec)) {
-          log_ack_send_error(send_ec);
-        } else {
-          log_ack_sent(ack_info.ack, ack_info.bitmap);
-        }
+      std::error_code send_ec;
+      if (!udp_socket_.send(ack_packet, server_endpoint, send_ec)) {
+        log_ack_send_error(send_ec);
+      } else {
+        log_ack_sent(ack_info.ack, ack_info.bitmap);
       }
     } else if (frame.kind == mux::FrameKind::kAck) {
       session_->process_ack(frame.ack);

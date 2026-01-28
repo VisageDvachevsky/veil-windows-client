@@ -488,16 +488,16 @@ int main(int argc, char* argv[]) {
 
                     // Send ACK back to client (Issue #72 fix)
                     // Without ACKs, the client keeps retransmitting packets
+                    // IMPORTANT: Use encrypt_frame() instead of encrypt_data() to preserve the ACK frame kind.
+                    // encrypt_data() wraps data in a DATA frame, which would cause the receiver to
+                    // incorrectly interpret the ACK as data and try to write it to TUN.
                     auto ack_info = session->transport->generate_ack(frame.data.stream_id);
                     auto ack_frame = mux::make_ack_frame(ack_info.stream_id, ack_info.ack, ack_info.bitmap);
-                    auto ack_encoded = mux::MuxCodec::encode(ack_frame);
-                    auto ack_packets = session->transport->encrypt_data(ack_encoded, 0, false);
-                    for (const auto& ack_pkt : ack_packets) {
-                      if (!udp_socket.send(ack_pkt, pkt.remote, ec)) {
-                        log_ack_send_error(ec);
-                      } else {
-                        log_ack_sent(ack_info.ack, ack_info.bitmap);
-                      }
+                    auto ack_packet = session->transport->encrypt_frame(ack_frame);
+                    if (!udp_socket.send(ack_packet, pkt.remote, ec)) {
+                      log_ack_send_error(ec);
+                    } else {
+                      log_ack_sent(ack_info.ack, ack_info.bitmap);
                     }
                   } else if (frame.kind == mux::FrameKind::kAck) {
                     log_ack_processing();

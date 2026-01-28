@@ -100,6 +100,12 @@ class TransportSession {
   std::vector<std::vector<std::uint8_t>> encrypt_data(std::span<const std::uint8_t> plaintext,
                                                        std::uint64_t stream_id = 0, bool fin = false);
 
+  // Encrypt a pre-constructed frame (e.g., ACK, control, heartbeat frames).
+  // Unlike encrypt_data() which wraps plaintext in DATA frames, this method
+  // encrypts the frame as-is, preserving its original frame kind.
+  // Returns a single encrypted packet.
+  std::vector<std::uint8_t> encrypt_frame(const mux::MuxFrame& frame);
+
   // Decrypt and process a received packet.
   // Returns decrypted mux frames if successful.
   // Performs replay check and decryption.
