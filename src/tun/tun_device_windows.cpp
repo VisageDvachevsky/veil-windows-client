@@ -473,8 +473,46 @@ std::ptrdiff_t TunDevice::read_into(std::span<std::uint8_t> buffer, std::error_c
 
 bool TunDevice::write(std::span<const std::uint8_t> packet, std::error_code& ec) {
   if (!impl_ || !impl_->session) {
+    LOG_ERROR("TunDevice::write: not connected (impl={}, session={})",
+              impl_ ? "valid" : "null",
+              (impl_ && impl_->session) ? "valid" : "null");
     ec = std::make_error_code(std::errc::not_connected);
     return false;
+  }
+
+  // Log packet details for diagnostics (Issue #74)
+  // Use WARN level so logging is always visible regardless of build type
+  if (packet.size() >= 20) {
+    // Extract IP header fields
+    std::uint8_t version = (packet[0] >> 4) & 0x0F;
+    std::uint8_t ihl = packet[0] & 0x0F; // IP Header Length in 32-bit words
+    std::uint8_t protocol = packet[9];   // Protocol field
+    if (version == 4) {
+      std::uint32_t src_ip = (static_cast<std::uint32_t>(packet[12]) << 24) |
+                             (static_cast<std::uint32_t>(packet[13]) << 16) |
+                             (static_cast<std::uint32_t>(packet[14]) << 8) |
+                             static_cast<std::uint32_t>(packet[15]);
+      std::uint32_t dst_ip = (static_cast<std::uint32_t>(packet[16]) << 24) |
+                             (static_cast<std::uint32_t>(packet[17]) << 16) |
+                             (static_cast<std::uint32_t>(packet[18]) << 8) |
+                             static_cast<std::uint32_t>(packet[19]);
+      std::uint16_t total_len = static_cast<std::uint16_t>(
+          (static_cast<unsigned int>(packet[2]) << 8) |
+          static_cast<unsigned int>(packet[3]));
+      LOG_WARN("TunDevice::write: {} bytes, IPv4 {}.{}.{}.{} -> {}.{}.{}.{}, "
+               "IHL={}, proto={}, total_len={}",
+               packet.size(),
+               (src_ip >> 24) & 0xFF, (src_ip >> 16) & 0xFF,
+               (src_ip >> 8) & 0xFF, src_ip & 0xFF,
+               (dst_ip >> 24) & 0xFF, (dst_ip >> 16) & 0xFF,
+               (dst_ip >> 8) & 0xFF, dst_ip & 0xFF,
+               ihl, protocol, total_len);
+    } else {
+      LOG_WARN("TunDevice::write: {} bytes, IP version {} (not IPv4), first byte=0x{:02x}",
+               packet.size(), version, packet[0]);
+    }
+  } else {
+    LOG_WARN("TunDevice::write: {} bytes (too small for IPv4 header)", packet.size());
   }
 
   BYTE* send_packet = g_wintun.AllocateSendPacket(
@@ -483,6 +521,8 @@ bool TunDevice::write(std::span<const std::uint8_t> packet, std::error_code& ec)
   if (!send_packet) {
     ec = last_error();
     stats_.write_errors++;
+    LOG_ERROR("TunDevice::write: AllocateSendPacket failed for {} bytes: {}",
+              packet.size(), ec.message());
     return false;
   }
 
@@ -491,6 +531,7 @@ bool TunDevice::write(std::span<const std::uint8_t> packet, std::error_code& ec)
 
   stats_.packets_written++;
   stats_.bytes_written += packet.size();
+  LOG_WARN("TunDevice::write: SUCCESS {} bytes sent to Wintun", packet.size());
   return true;
 }
 

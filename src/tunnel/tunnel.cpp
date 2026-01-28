@@ -412,6 +412,23 @@ void Tunnel::on_udp_packet(std::span<const std::uint8_t> packet,
       stats_.tun_packets_sent++;
       stats_.tun_bytes_sent += frame.data.payload.size();
 
+      // Log successful TUN write for diagnostics (helps debug Issue #74)
+      // Use WARN level so logging is always visible regardless of build type
+      if (frame.data.payload.size() >= 20) {
+        // Extract destination IP from IPv4 header for logging
+        std::uint32_t dst_ip = 0;
+        dst_ip |= static_cast<std::uint32_t>(frame.data.payload[16]) << 24;
+        dst_ip |= static_cast<std::uint32_t>(frame.data.payload[17]) << 16;
+        dst_ip |= static_cast<std::uint32_t>(frame.data.payload[18]) << 8;
+        dst_ip |= static_cast<std::uint32_t>(frame.data.payload[19]);
+        LOG_WARN("TUN write: {} bytes -> {}.{}.{}.{}",
+                 frame.data.payload.size(),
+                 (dst_ip >> 24) & 0xFF, (dst_ip >> 16) & 0xFF,
+                 (dst_ip >> 8) & 0xFF, dst_ip & 0xFF);
+      } else {
+        LOG_WARN("TUN write: {} bytes (packet too small for IPv4)", frame.data.payload.size());
+      }
+
       // Send ACK back to server (Issue #72 fix)
       // Without ACKs, the server would keep retransmitting packets
       // IMPORTANT: Use encrypt_frame() instead of encrypt_data() to preserve the ACK frame kind.
