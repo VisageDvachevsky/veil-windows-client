@@ -427,8 +427,9 @@ int main(int argc, char* argv[]) {
             session->bytes_received += pkt.data.size();
 
             if (session->transport) {
-              LOG_DEBUG("Processing packet from session {} ({}:{}), size={}",
-                        session->session_id, pkt.remote.host, pkt.remote.port, pkt.data.size());
+              // Use WARN level temporarily for Issue #72 debugging
+              LOG_WARN("Processing packet from session {} ({}:{}), size={}",
+                       session->session_id, pkt.remote.host, pkt.remote.port, pkt.data.size());
               auto frames = session->transport->decrypt_packet(pkt.data);
               if (frames) {
                 LOG_DEBUG("Decrypted {} frame(s) from session {}", frames->size(), session->session_id);
