@@ -307,19 +307,67 @@ std::ptrdiff_t TunDevice::read_into(std::span<std::uint8_t> buffer, std::error_c
 bool TunDevice::write(std::span<const std::uint8_t> packet, std::error_code& ec) {
   std::ptrdiff_t n = 0;
 
+  // Log packet details for diagnostics (Issue #74)
+  // Use WARN level so logging is always visible regardless of build type
+  if (packet.size() >= 20) {
+    std::uint8_t version = (packet[0] >> 4) & 0x0F;
+    std::uint8_t ihl = packet[0] & 0x0F; // IP Header Length in 32-bit words
+    std::uint8_t protocol = packet[9];   // Protocol field
+    if (version == 4) {
+      std::uint32_t src_ip = (static_cast<std::uint32_t>(packet[12]) << 24) |
+                             (static_cast<std::uint32_t>(packet[13]) << 16) |
+                             (static_cast<std::uint32_t>(packet[14]) << 8) |
+                             static_cast<std::uint32_t>(packet[15]);
+      std::uint32_t dst_ip = (static_cast<std::uint32_t>(packet[16]) << 24) |
+                             (static_cast<std::uint32_t>(packet[17]) << 16) |
+                             (static_cast<std::uint32_t>(packet[18]) << 8) |
+                             static_cast<std::uint32_t>(packet[19]);
+      std::uint16_t total_len = static_cast<std::uint16_t>(
+          (static_cast<unsigned int>(packet[2]) << 8) |
+          static_cast<unsigned int>(packet[3]));
+      LOG_WARN("TunDevice::write: {} bytes, IPv4 {}.{}.{}.{} -> {}.{}.{}.{}, "
+               "IHL={}, proto={}, total_len={}",
+               packet.size(),
+               (src_ip >> 24) & 0xFF, (src_ip >> 16) & 0xFF,
+               (src_ip >> 8) & 0xFF, src_ip & 0xFF,
+               (dst_ip >> 24) & 0xFF, (dst_ip >> 16) & 0xFF,
+               (dst_ip >> 8) & 0xFF, dst_ip & 0xFF,
+               ihl, protocol, total_len);
+    } else if (version == 6) {
+      LOG_WARN("TunDevice::write: {} bytes, IPv6 packet", packet.size());
+    } else {
+      LOG_WARN("TunDevice::write: {} bytes, unknown IP version {}, first byte=0x{:02x}",
+               packet.size(), version, packet[0]);
+    }
+  } else {
+    LOG_WARN("TunDevice::write: {} bytes (too small for IP header)", packet.size());
+  }
+
   if (packet_info_) {
     // Prepend 4-byte packet info header.
     std::vector<std::uint8_t> buffer(kTunPiSize + packet.size());
-    // Flags = 0, Protocol = ETH_P_IP (0x0800) in network byte order.
+
+    // Determine protocol type from packet
+    std::uint16_t proto = 0x0800; // Default to ETH_P_IP (IPv4)
+    if (packet.size() >= 1) {
+      std::uint8_t version = (packet[0] >> 4) & 0x0F;
+      if (version == 6) {
+        proto = 0x86DD; // ETH_P_IPV6
+      }
+    }
+
+    // Flags = 0, Protocol in network byte order
     buffer[0] = 0;
     buffer[1] = 0;
-    buffer[2] = 0x08;
-    buffer[3] = 0x00;
+    buffer[2] = static_cast<std::uint8_t>((proto >> 8) & 0xFF);
+    buffer[3] = static_cast<std::uint8_t>(proto & 0xFF);
     std::memcpy(buffer.data() + kTunPiSize, packet.data(), packet.size());
     n = ::write(fd_, buffer.data(), buffer.size());
     if (n < 0 || static_cast<std::size_t>(n) != buffer.size()) {
       ec = last_error();
       stats_.write_errors++;
+      LOG_ERROR("TunDevice::write: failed to write {} bytes (with PI header): {}",
+                packet.size(), ec.message());
       return false;
     }
   } else {
@@ -327,12 +375,14 @@ bool TunDevice::write(std::span<const std::uint8_t> packet, std::error_code& ec)
     if (n < 0 || static_cast<std::size_t>(n) != packet.size()) {
       ec = last_error();
       stats_.write_errors++;
+      LOG_ERROR("TunDevice::write: failed to write {} bytes: {}", packet.size(), ec.message());
       return false;
     }
   }
 
   stats_.packets_written++;
   stats_.bytes_written += packet.size();
+  LOG_WARN("TunDevice::write: SUCCESS {} bytes written", packet.size());
   return true;
 }
 
