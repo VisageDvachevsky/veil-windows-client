@@ -18,6 +18,16 @@ namespace veil::tunnel {
 namespace {
 constexpr std::size_t kMaxPacketSize = 65535;
 
+// Helper functions for ACK sending logging (Issue #72 fix)
+// These avoid the bugprone-lambda-function-name clang-tidy warning when LOG_* is used in lambdas
+void log_ack_send_error(const std::error_code& ec) {
+  LOG_WARN("Failed to send ACK to server: {}", ec.message());
+}
+
+void log_ack_sent([[maybe_unused]] std::uint64_t ack, [[maybe_unused]] std::uint32_t bitmap) {
+  LOG_DEBUG("Sent ACK to server: ack={}, bitmap={:#010x}", ack, bitmap);
+}
+
 // Helper to provide actionable error message for key file issues.
 std::string format_key_error(const std::string& key_type, const std::string& path,
                              const std::error_code& ec) {
@@ -412,10 +422,9 @@ void Tunnel::on_udp_packet(std::span<const std::uint8_t> packet,
       for (const auto& ack_pkt : ack_packets) {
         std::error_code send_ec;
         if (!udp_socket_.send(ack_pkt, server_endpoint, send_ec)) {
-          LOG_WARN("Failed to send ACK to server: {}", send_ec.message());
+          log_ack_send_error(send_ec);
         } else {
-          LOG_DEBUG("Sent ACK to server: ack={}, bitmap={:#010x}",
-                    ack_info.ack, ack_info.bitmap);
+          log_ack_sent(ack_info.ack, ack_info.bitmap);
         }
       }
     } else if (frame.kind == mux::FrameKind::kAck) {

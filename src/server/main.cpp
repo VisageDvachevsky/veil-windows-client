@@ -142,6 +142,16 @@ void log_ack_processing() {
   LOG_WARN("Processing ACK frame");
 }
 
+// Helper functions for ACK sending logging (Issue #72 fix)
+// These avoid the bugprone-lambda-function-name clang-tidy warning
+void log_ack_send_error(const std::error_code& ec) {
+  LOG_WARN("Failed to send ACK to client: {}", ec.message());
+}
+
+void log_ack_sent([[maybe_unused]] std::uint64_t ack, [[maybe_unused]] std::uint32_t bitmap) {
+  LOG_DEBUG("Sent ACK to client: ack={}, bitmap={:#010x}", ack, bitmap);
+}
+
 void log_new_client(const std::string& host, std::uint16_t port, std::uint64_t session_id) {
   LOG_INFO("New client connected from {}:{}, session {}", host, port, session_id);
 
@@ -484,10 +494,9 @@ int main(int argc, char* argv[]) {
                     auto ack_packets = session->transport->encrypt_data(ack_encoded, 0, false);
                     for (const auto& ack_pkt : ack_packets) {
                       if (!udp_socket.send(ack_pkt, pkt.remote, ec)) {
-                        LOG_WARN("Failed to send ACK to client: {}", ec.message());
+                        log_ack_send_error(ec);
                       } else {
-                        LOG_DEBUG("Sent ACK to client: ack={}, bitmap={:#010x}",
-                                  ack_info.ack, ack_info.bitmap);
+                        log_ack_sent(ack_info.ack, ack_info.bitmap);
                       }
                     }
                   } else if (frame.kind == mux::FrameKind::kAck) {
