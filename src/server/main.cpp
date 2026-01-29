@@ -116,27 +116,31 @@ void log_decryption_failure(std::uint64_t session_id, const std::string& host,
 // Helper function to log packet processing - avoids clang-tidy bugprone-lambda-function-name
 // warning when LOG_DEBUG is used inside lambdas (Issue #72 debugging)
 // Changed to DEBUG level to avoid performance impact in hot path (Issue #92)
-void log_processing_packet(std::uint64_t session_id, const std::string& host,
-                           std::uint16_t port, std::size_t size) {
+void log_processing_packet([[maybe_unused]] std::uint64_t session_id,
+                           [[maybe_unused]] const std::string& host,
+                           [[maybe_unused]] std::uint16_t port,
+                           [[maybe_unused]] std::size_t size) {
   LOG_DEBUG("Processing packet from session {} ({}:{}), size={}",
             session_id, host, port, size);
 }
 
 // Additional helper functions for Issue #72 debugging - avoid bugprone-lambda-function-name
 // Changed to DEBUG level to avoid performance impact in hot path (Issue #92)
-void log_decrypted_frames(std::size_t frame_count, std::uint64_t session_id) {
+void log_decrypted_frames([[maybe_unused]] std::size_t frame_count,
+                          [[maybe_unused]] std::uint64_t session_id) {
   LOG_DEBUG("Decrypted {} frame(s) from session {}", frame_count, session_id);
 }
 
-void log_frame_info(int kind, bool is_data) {
+void log_frame_info([[maybe_unused]] int kind, [[maybe_unused]] bool is_data) {
   LOG_DEBUG("  Frame kind={}, is_data={}", kind, is_data);
 }
 
-void log_tun_write_attempt(std::size_t bytes, std::uint64_t session_id) {
+void log_tun_write_attempt([[maybe_unused]] std::size_t bytes,
+                           [[maybe_unused]] std::uint64_t session_id) {
   LOG_DEBUG("Writing {} bytes to TUN from session {}", bytes, session_id);
 }
 
-void log_tun_write_success(std::size_t bytes) {
+void log_tun_write_success([[maybe_unused]] std::size_t bytes) {
   LOG_DEBUG("TUN write SUCCESS: {} bytes", bytes);
 }
 
@@ -147,7 +151,7 @@ void log_ack_processing() {
 // Helper functions for ACK sending logging (Issue #72 fix)
 // These avoid the bugprone-lambda-function-name clang-tidy warning
 // Changed to DEBUG level to avoid performance impact in hot path (Issue #92)
-void log_ack_send_error(const std::error_code& ec) {
+void log_ack_send_error([[maybe_unused]] const std::error_code& ec) {
   LOG_DEBUG("Failed to send ACK to client: {}", ec.message());
 }
 
