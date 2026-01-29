@@ -108,12 +108,12 @@ bool RetransmitBuffer::acknowledge(std::uint64_t sequence) {
 void RetransmitBuffer::acknowledge_cumulative(std::uint64_t sequence) {
   // Debug logging for cumulative ACK (Issue #72)
   // Changed to DEBUG level to avoid performance impact in hot path (Issue #92)
-  std::uint64_t min_pending = pending_.empty() ? 0 : pending_.begin()->first;
-  std::uint64_t max_pending = pending_.empty() ? 0 : pending_.rbegin()->first;
+  [[maybe_unused]] std::uint64_t min_pending = pending_.empty() ? 0 : pending_.begin()->first;
+  [[maybe_unused]] std::uint64_t max_pending = pending_.empty() ? 0 : pending_.rbegin()->first;
   LOG_DEBUG("acknowledge_cumulative: ack_seq={}, pending_count={}, pending_range=[{}, {}]",
             sequence, pending_.size(), min_pending, max_pending);
 
-  std::size_t acked_count = 0;
+  [[maybe_unused]] std::size_t acked_count = 0;
   auto it = pending_.begin();
   while (it != pending_.end() && it->first <= sequence) {
     const auto& pkt = it->second;
