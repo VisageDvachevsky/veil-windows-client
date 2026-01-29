@@ -421,12 +421,13 @@ void Tunnel::on_udp_packet(std::span<const std::uint8_t> packet,
         dst_ip |= static_cast<std::uint32_t>(frame.data.payload[17]) << 16;
         dst_ip |= static_cast<std::uint32_t>(frame.data.payload[18]) << 8;
         dst_ip |= static_cast<std::uint32_t>(frame.data.payload[19]);
-        LOG_WARN("TUN write: {} bytes -> {}.{}.{}.{}",
-                 frame.data.payload.size(),
-                 (dst_ip >> 24) & 0xFF, (dst_ip >> 16) & 0xFF,
-                 (dst_ip >> 8) & 0xFF, dst_ip & 0xFF);
+        // Changed to DEBUG level to avoid performance impact in hot path (Issue #92)
+        LOG_DEBUG("TUN write: {} bytes -> {}.{}.{}.{}",
+                  frame.data.payload.size(),
+                  (dst_ip >> 24) & 0xFF, (dst_ip >> 16) & 0xFF,
+                  (dst_ip >> 8) & 0xFF, dst_ip & 0xFF);
       } else {
-        LOG_WARN("TUN write: {} bytes (packet too small for IPv4)", frame.data.payload.size());
+        LOG_DEBUG("TUN write: {} bytes (packet too small for IPv4)", frame.data.payload.size());
       }
 
       // Send ACK back to server (Issue #72 fix)
