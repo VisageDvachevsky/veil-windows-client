@@ -28,6 +28,10 @@ add_executable(veil-client-gui
   statistics_widget.h
   ipc_client_manager.cpp
   ipc_client_manager.h
+  notification_preferences.cpp
+  notification_preferences.h
+  notification_history_dialog.cpp
+  notification_history_dialog.h
   update_checker.cpp
   update_checker.h
   server_config.cpp

@@ -64,6 +64,7 @@ class SettingsWidget : public QWidget {
   QWidget* createConnectionSection();
   QWidget* createDpiBypassSection();
   QWidget* createTunInterfaceSection();
+  QWidget* createNotificationSection();
   QWidget* createAdvancedSection();
 
   bool isValidHostname(const QString& hostname) const;
@@ -118,6 +119,18 @@ class SettingsWidget : public QWidget {
   QLabel* tunNetmaskValidationLabel_;
   QLabel* tunNetmaskValidationIndicator_;
 
+  // Notifications
+  QCheckBox* notificationsEnabledCheck_;
+  QCheckBox* notificationSoundCheck_;
+  QCheckBox* showNotificationDetailsCheck_;
+  QCheckBox* connectionEstablishedCheck_;
+  QCheckBox* connectionLostCheck_;
+  QCheckBox* minimizeToTrayCheck_;
+  QCheckBox* updatesAvailableCheck_;
+  QCheckBox* errorNotificationsCheck_;
+  QPushButton* viewHistoryButton_;
+  QPushButton* clearHistoryButton_;
+
   // Advanced
   QCheckBox* obfuscationCheck_;
   QCheckBox* verboseLoggingCheck_;
@@ -138,6 +151,7 @@ class SettingsWidget : public QWidget {
   CollapsibleSection* routingSection_;
   CollapsibleSection* connectionSection_;
   CollapsibleSection* dpiBypassSection_;
+  CollapsibleSection* notificationSection_;
   CollapsibleSection* advancedSection_;
 
   // Advanced mode toggle
