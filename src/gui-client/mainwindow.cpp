@@ -31,6 +31,7 @@
 #include "ipc_client_manager.h"
 #include "settings_widget.h"
 #include "update_checker.h"
+#include "server_list_widget.h"
 
 #ifdef _WIN32
 #include <chrono>
@@ -114,6 +115,7 @@ MainWindow::MainWindow(QWidget* parent)
       connectionWidget_(new ConnectionWidget(this)),
       settingsWidget_(new SettingsWidget(this)),
       diagnosticsWidget_(new DiagnosticsWidget(this)),
+      serverListWidget_(new ServerListWidget(this)),
       ipcManager_(std::make_unique<IpcClientManager>(this)),
       trayIcon_(nullptr),
       trayMenu_(nullptr),
@@ -127,7 +129,7 @@ MainWindow::MainWindow(QWidget* parent)
   setupStatusBar();
   setupSystemTray();
   setupUpdateChecker();
-  applyDarkTheme();
+  loadThemePreference();
   qDebug() << "MainWindow: GUI components initialized";
 
   // Attempt to connect to daemon
@@ -224,6 +226,7 @@ void MainWindow::setupUi() {
   stackedWidget_->addWidget(connectionWidget_);
   stackedWidget_->addWidget(settingsWidget_);
   stackedWidget_->addWidget(diagnosticsWidget_);
+  stackedWidget_->addWidget(serverListWidget_);
 
   // Set central widget
   setCentralWidget(stackedWidget_);
@@ -231,14 +234,22 @@ void MainWindow::setupUi() {
   // Connect signals
   connect(connectionWidget_, &ConnectionWidget::settingsRequested,
           this, &MainWindow::showSettingsView);
+  connect(connectionWidget_, &ConnectionWidget::serversRequested,
+          this, &MainWindow::showServerListView);
   connect(settingsWidget_, &SettingsWidget::backRequested,
           this, &MainWindow::showConnectionView);
   connect(diagnosticsWidget_, &DiagnosticsWidget::backRequested,
+          this, &MainWindow::showConnectionView);
+  connect(serverListWidget_, &ServerListWidget::backRequested,
           this, &MainWindow::showConnectionView);
 
   // Update connection widget when settings are saved
   connect(settingsWidget_, &SettingsWidget::settingsSaved,
           connectionWidget_, &ConnectionWidget::loadServerSettings);
+
+  // Apply theme when changed in settings
+  connect(settingsWidget_, &SettingsWidget::themeChanged,
+          this, &MainWindow::applyTheme);
 }
 
 // Helper function to build ConnectionConfig from QSettings
@@ -404,10 +415,7 @@ void MainWindow::setupIpcConnections() {
         qDebug() << "[MainWindow] Retrying daemon connection after service startup...";
         if (!ipcManager_->connectToDaemon()) {
           qWarning() << "[MainWindow] Failed to connect to daemon even after service start";
-          connectionWidget_->setErrorMessage(
-              tr("Failed to connect to daemon after service start."));
-          connectionWidget_->setConnectionState(ConnectionState::kError);
-          updateTrayIcon(TrayConnectionState::kError);
+          showError(errors::daemon_not_running(), true);
         } else {
           qDebug() << "[MainWindow] Successfully connected to daemon after service start";
           qDebug() << "[MainWindow] Now building and sending connection configuration...";
@@ -420,11 +428,7 @@ void MainWindow::setupIpcConnections() {
 #else
         // Failed to connect to daemon - show error
         qWarning() << "[MainWindow] Platform: Non-Windows - cannot auto-start daemon";
-        connectionWidget_->setErrorMessage(
-            tr("Cannot connect: VEIL daemon is not running.\n"
-               "Please start the daemon first."));
-        connectionWidget_->setConnectionState(ConnectionState::kError);
-        updateTrayIcon(TrayConnectionState::kError);
+        showError(errors::daemon_not_running(), true);
         return;
 #endif
       }
@@ -450,12 +454,7 @@ void MainWindow::setupIpcConnections() {
         qWarning() << "[MainWindow]   Is File:" << keyFileInfo.isFile();
         qWarning() << "[MainWindow]   Path:" << keyFileInfo.absoluteFilePath();
 
-        connectionWidget_->setErrorMessage(
-            tr("Pre-shared key file not found: %1\n"
-               "Please configure a valid key file in Settings.")
-                .arg(QString::fromStdString(config.key_file)));
-        connectionWidget_->setConnectionState(ConnectionState::kError);
-        updateTrayIcon(TrayConnectionState::kError);
+        showError(errors::missing_key_file(config.key_file), false);
         return;
       } else {
         qDebug() << "[MainWindow] Key file validation PASSED";
@@ -470,10 +469,7 @@ void MainWindow::setupIpcConnections() {
     if (!ipcManager_->sendConnect(config)) {
       // Failed to send connect command
       qWarning() << "[MainWindow] Failed to send connect command to daemon";
-      connectionWidget_->setErrorMessage(
-          tr("Failed to send connect command to daemon."));
-      connectionWidget_->setConnectionState(ConnectionState::kError);
-      updateTrayIcon(TrayConnectionState::kError);
+      showError(errors::ipc_error("Failed to send connect command"), false);
     } else {
       qDebug() << "[MainWindow] Connect command sent successfully, waiting for response...";
     }
@@ -602,8 +598,10 @@ void MainWindow::setupIpcConnections() {
     qWarning() << "[MainWindow] Details:" << details;
     qWarning() << "[MainWindow] ========================================";
 
-    connectionWidget_->setErrorMessage(error);
-    statusBar()->showMessage(error + ": " + details, 5000);
+    // Create structured error from IPC error
+    ErrorMessage ipcError = errors::ipc_error(details.toStdString());
+    ipcError.title = error.toStdString();
+    showError(ipcError, false);
   });
 
   connect(ipcManager_.get(), &IpcClientManager::daemonConnectionChanged,
@@ -681,6 +679,10 @@ void MainWindow::setupMenuBar() {
   auto* settingsViewAction = viewMenu->addAction(tr("&Settings"));
   settingsViewAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_2));
   connect(settingsViewAction, &QAction::triggered, this, &MainWindow::showSettingsView);
+
+  auto* serversAction = viewMenu->addAction(tr("S&ervers"));
+  serversAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_E));
+  connect(serversAction, &QAction::triggered, this, &MainWindow::showServerListView);
 
   auto* diagnosticsAction = viewMenu->addAction(tr("&Diagnostics"));
   diagnosticsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_3));
@@ -784,6 +786,46 @@ void MainWindow::applyDarkTheme() {
   setStyleSheet(styleSheet() + windowStyle);
 }
 
+void MainWindow::loadThemePreference() {
+  QSettings settings("VEIL", "VPN Client");
+  int themeValue = settings.value("ui/theme", static_cast<int>(Theme::kDark)).toInt();
+
+  // Validate theme value
+  if (themeValue < 0 || themeValue > 2) {
+    themeValue = static_cast<int>(Theme::kDark);
+  }
+
+  currentTheme_ = static_cast<Theme>(themeValue);
+  applyTheme(currentTheme_);
+}
+
+void MainWindow::applyTheme(Theme theme) {
+  currentTheme_ = theme;
+
+  // Get the stylesheet for the theme
+  QString stylesheet = getThemeStylesheet(theme);
+
+  // Additional window-specific styles based on theme
+  Theme effectiveTheme = resolveTheme(theme);
+  QString backgroundColor = (effectiveTheme == Theme::kDark) ? "#0d1117" : "#f8f9fa";
+
+  QString windowStyle = QString(R"(
+    QMainWindow {
+      background-color: %1;
+    }
+    QStackedWidget {
+      background-color: %1;
+    }
+  )").arg(backgroundColor);
+
+  // Apply the combined stylesheet
+  setStyleSheet(stylesheet + windowStyle);
+
+  qDebug() << "MainWindow: Applied theme:"
+           << (effectiveTheme == Theme::kDark ? "Dark" : "Light")
+           << (theme == Theme::kSystem ? "(from system)" : "");
+}
+
 void MainWindow::showConnectionView() {
   stackedWidget_->setCurrentWidgetAnimated(stackedWidget_->indexOf(connectionWidget_));
   statusBar()->showMessage(tr("Connection"));
@@ -797,6 +839,11 @@ void MainWindow::showSettingsView() {
 void MainWindow::showDiagnosticsView() {
   stackedWidget_->setCurrentWidgetAnimated(stackedWidget_->indexOf(diagnosticsWidget_));
   statusBar()->showMessage(tr("Diagnostics"));
+}
+
+void MainWindow::showServerListView() {
+  stackedWidget_->setCurrentWidgetAnimated(stackedWidget_->indexOf(serverListWidget_));
+  statusBar()->showMessage(tr("Server Management"));
 }
 
 void MainWindow::showAboutDialog() {
@@ -1509,5 +1556,36 @@ bool MainWindow::waitForServiceReady(int timeout_ms) {
   }
 }
 #endif
+
+void MainWindow::showError(const ErrorMessage& error, bool showTrayNotification) {
+  // Update connection widget with structured error
+  connectionWidget_->setError(error);
+  connectionWidget_->setConnectionState(ConnectionState::kError);
+
+  // Update tray icon state
+  updateTrayIcon(TrayConnectionState::kError);
+
+  // Show system tray notification for critical errors
+  if (showTrayNotification && trayIcon_ && trayIcon_->isVisible()) {
+    QString title = QString::fromStdString(error.category_name());
+    QString message = QString::fromStdString(error.title);
+    if (!error.description.empty()) {
+      message += "\n" + QString::fromStdString(error.description);
+    }
+
+    QSystemTrayIcon::MessageIcon icon = QSystemTrayIcon::Critical;
+    if (error.category == ErrorCategory::kConfiguration) {
+      icon = QSystemTrayIcon::Warning;
+    }
+
+    trayIcon_->showMessage(title, message, icon, 5000);
+  }
+
+  // Update status bar with error title
+  statusBar()->showMessage(
+      QString::fromStdString(error.title) + " - " +
+          QString::fromStdString(error.category_name()),
+      5000);
+}
 
 }  // namespace veil::gui

@@ -10,6 +10,9 @@
 #include <QScrollArea>
 #include <QTimer>
 
+#include "collapsible_section.h"
+#include "common/gui/theme.h"
+
 namespace veil::gui {
 
 /// Validation state for input fields
@@ -29,6 +32,7 @@ class SettingsWidget : public QWidget {
  signals:
   void backRequested();
   void settingsSaved();
+  void themeChanged(Theme theme);
 
  public slots:
   /// Load settings from config file
@@ -54,13 +58,13 @@ class SettingsWidget : public QWidget {
 
  private:
   void setupUi();
-  void createServerSection(QWidget* parent);
-  void createCryptoSection(QWidget* parent);
-  void createRoutingSection(QWidget* parent);
-  void createConnectionSection(QWidget* parent);
-  void createDpiBypassSection(QWidget* parent);
-  void createTunInterfaceSection(QWidget* parent);
-  void createAdvancedSection(QWidget* parent);
+  QWidget* createServerSection();
+  QWidget* createCryptoSection();
+  QWidget* createRoutingSection();
+  QWidget* createConnectionSection();
+  QWidget* createDpiBypassSection();
+  QWidget* createTunInterfaceSection();
+  QWidget* createAdvancedSection();
 
   bool isValidHostname(const QString& hostname) const;
   bool isValidIpAddress(const QString& ip) const;
@@ -69,6 +73,7 @@ class SettingsWidget : public QWidget {
   void setFieldValidationState(QLineEdit* field, QLabel* indicator,
                                 ValidationState state, const QString& message = "");
   void updateValidationSummary();
+  void onAdvancedModeToggled(bool showAdvanced);
 
   // Validation summary banner
   QLabel* validationSummaryBanner_;
@@ -117,6 +122,7 @@ class SettingsWidget : public QWidget {
   QCheckBox* obfuscationCheck_;
   QCheckBox* verboseLoggingCheck_;
   QCheckBox* developerModeCheck_;
+  QComboBox* themeCombo_;
 
   // Buttons
   QPushButton* saveButton_;
@@ -124,6 +130,21 @@ class SettingsWidget : public QWidget {
 
   // Validation debounce timer
   QTimer* validationDebounceTimer_;
+
+  // Collapsible sections
+  CollapsibleSection* serverSection_;
+  CollapsibleSection* cryptoSection_;
+  CollapsibleSection* tunInterfaceSection_;
+  CollapsibleSection* routingSection_;
+  CollapsibleSection* connectionSection_;
+  CollapsibleSection* dpiBypassSection_;
+  CollapsibleSection* advancedSection_;
+
+  // Advanced mode toggle
+  QCheckBox* showAdvancedCheck_;
+
+  // Search/filter
+  QLineEdit* searchEdit_;
 
   // State
   bool hasUnsavedChanges_{false};

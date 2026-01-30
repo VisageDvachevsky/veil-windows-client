@@ -48,6 +48,8 @@ add_executable(veil_unit_tests
   handshake_replay_cache_tests.cpp
   client_registry_tests.cpp
   multi_client_handshake_tests.cpp
+  session_ticket_tests.cpp
+  zero_rtt_handshake_tests.cpp
   timer_heap_tests.cpp
   obfuscation_tests.cpp
   tun_device_tests.cpp
@@ -61,6 +63,7 @@ add_executable(veil_unit_tests
   spsc_queue_tests.cpp
   thread_pool_tests.cpp
   packet_pool_tests.cpp
+  error_message_tests.cpp
   ${VEIL_PLATFORM_TEST_SOURCES}
 )
 

@@ -8,7 +8,11 @@
 #include <QGraphicsOpacityEffect>
 #include <QElapsedTimer>
 
+#include "common/gui/error_message.h"
+
 namespace veil::gui {
+
+class ServerSelectorWidget;
 
 /// Connection states as defined in the UI design spec
 enum class ConnectionState {
@@ -28,6 +32,7 @@ class ConnectionWidget : public QWidget {
 
  signals:
   void settingsRequested();
+  void serversRequested();
   void connectRequested();
   void disconnectRequested();
 
@@ -42,8 +47,11 @@ class ConnectionWidget : public QWidget {
   void setSessionId(const QString& sessionId);
   void setServerAddress(const QString& server, uint16_t port);
 
-  /// Set error message when in error state
+  /// Set error message when in error state (legacy - simple string)
   void setErrorMessage(const QString& message);
+
+  /// Set structured error message with category and actionable guidance
+  void setError(const ErrorMessage& error);
 
   /// Handle connect button click (toggle connect/disconnect)
   void onConnectClicked();
@@ -73,7 +81,9 @@ class ConnectionWidget : public QWidget {
   QWidget* statusRing_;  // Custom painted status ring
   QLabel* statusLabel_;
   QLabel* subtitleLabel_;
+  QWidget* errorWidget_;  // Error display container
   QLabel* errorLabel_;
+  QPushButton* copyErrorButton_;  // Copy error details button
   QPushButton* connectButton_;
 
   // Session info group
@@ -86,6 +96,7 @@ class ConnectionWidget : public QWidget {
 
   // Navigation
   QPushButton* settingsButton_;
+  ServerSelectorWidget* serverSelector_;
 
   // State
   ConnectionState state_{ConnectionState::kDisconnected};
@@ -96,7 +107,8 @@ class ConnectionWidget : public QWidget {
   uint64_t txBytes_{0};
   uint64_t rxBytes_{0};
   int reconnectAttempt_{0};
-  QString errorMessage_;
+  QString errorMessage_;  // Legacy error message
+  ErrorMessage currentError_;  // Current structured error
 
   // Animation
   QTimer* pulseTimer_;
