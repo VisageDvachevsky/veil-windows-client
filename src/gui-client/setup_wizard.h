@@ -110,6 +110,8 @@ class SetupWizard : public QWidget {
   QPushButton* testConnectionButton_;
   QLabel* testResultLabel_;
   QLabel* configSummaryLabel_;
+  QCheckBox* createDesktopShortcutCheck_;
+  QCheckBox* createStartMenuShortcutCheck_;
 
   // Animation state
   bool isAnimating_{false};

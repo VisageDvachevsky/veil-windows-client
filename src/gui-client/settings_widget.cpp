@@ -17,6 +17,10 @@
 #include "notification_preferences.h"
 #include "notification_history_dialog.h"
 
+#ifdef _WIN32
+#include "windows/shortcut_manager.h"
+#endif
+
 namespace veil::gui {
 
 SettingsWidget::SettingsWidget(QWidget* parent) : QWidget(parent) {
@@ -436,16 +440,102 @@ QWidget* SettingsWidget::createStartupSection() {
   connect(launchOnWindowsStartupCheck_, &QCheckBox::stateChanged, this, &SettingsWidget::onLaunchOnStartupChanged);
   layout->addWidget(launchOnWindowsStartupCheck_);
 
+  // Add spacing
+  layout->addSpacing(12);
+
+  // Desktop shortcut section
+  auto* desktopShortcutLabel = new QLabel("Desktop Shortcut", group);
+  desktopShortcutLabel->setStyleSheet("font-weight: 600; color: #f0f6fc; font-size: 13px;");
+  layout->addWidget(desktopShortcutLabel);
+
+  auto* desktopShortcutRow = new QHBoxLayout();
+  desktopShortcutRow->setSpacing(12);
+
+  createDesktopShortcutButton_ = new QPushButton("Create Desktop Shortcut", group);
+  createDesktopShortcutButton_->setToolTip("Create a shortcut on the desktop for quick access");
+  createDesktopShortcutButton_->setCursor(Qt::PointingHandCursor);
+  createDesktopShortcutButton_->setStyleSheet(R"(
+    QPushButton {
+      background: rgba(88, 166, 255, 0.15);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      border-radius: 8px;
+      color: #58a6ff;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    QPushButton:hover {
+      background: rgba(88, 166, 255, 0.25);
+      border-color: #58a6ff;
+    }
+    QPushButton:disabled {
+      background: rgba(139, 148, 158, 0.1);
+      border-color: rgba(139, 148, 158, 0.2);
+      color: #8b949e;
+    }
+  )");
+  connect(createDesktopShortcutButton_, &QPushButton::clicked, this, &SettingsWidget::onCreateDesktopShortcut);
+  desktopShortcutRow->addWidget(createDesktopShortcutButton_);
+
+  desktopShortcutStatusLabel_ = new QLabel("", group);
+  desktopShortcutStatusLabel_->setStyleSheet("color: #8b949e; font-size: 12px;");
+  desktopShortcutRow->addWidget(desktopShortcutStatusLabel_);
+  desktopShortcutRow->addStretch();
+
+  layout->addLayout(desktopShortcutRow);
+
+  // Start Menu shortcut section
+  auto* startMenuShortcutLabel = new QLabel("Start Menu Entry", group);
+  startMenuShortcutLabel->setStyleSheet("font-weight: 600; color: #f0f6fc; font-size: 13px; margin-top: 8px;");
+  layout->addWidget(startMenuShortcutLabel);
+
+  auto* startMenuShortcutRow = new QHBoxLayout();
+  startMenuShortcutRow->setSpacing(12);
+
+  createStartMenuShortcutButton_ = new QPushButton("Create Start Menu Entry", group);
+  createStartMenuShortcutButton_->setToolTip("Create a shortcut in the Start Menu for easy access");
+  createStartMenuShortcutButton_->setCursor(Qt::PointingHandCursor);
+  createStartMenuShortcutButton_->setStyleSheet(R"(
+    QPushButton {
+      background: rgba(88, 166, 255, 0.15);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      border-radius: 8px;
+      color: #58a6ff;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    QPushButton:hover {
+      background: rgba(88, 166, 255, 0.25);
+      border-color: #58a6ff;
+    }
+    QPushButton:disabled {
+      background: rgba(139, 148, 158, 0.1);
+      border-color: rgba(139, 148, 158, 0.2);
+      color: #8b949e;
+    }
+  )");
+  connect(createStartMenuShortcutButton_, &QPushButton::clicked, this, &SettingsWidget::onCreateStartMenuShortcut);
+  startMenuShortcutRow->addWidget(createStartMenuShortcutButton_);
+
+  startMenuShortcutStatusLabel_ = new QLabel("", group);
+  startMenuShortcutStatusLabel_->setStyleSheet("color: #8b949e; font-size: 12px;");
+  startMenuShortcutRow->addWidget(startMenuShortcutStatusLabel_);
+  startMenuShortcutRow->addStretch();
+
+  layout->addLayout(startMenuShortcutRow);
+
   // Info text
   auto* infoLabel = new QLabel(
       "Startup options control how the application behaves when launched.\n"
-      "Note: Windows service auto-starts by default; this controls the GUI application.",
+      "Note: Windows service auto-starts by default; this controls the GUI application.\n\n"
+      "Shortcuts provide quick access to the application from the Desktop or Start Menu.",
       group);
   infoLabel->setWordWrap(true);
   infoLabel->setStyleSheet(QString("color: %1; font-size: 12px; padding: 12px; "
                                    "background: rgba(88, 166, 255, 0.08); "
                                    "border: 1px solid rgba(88, 166, 255, 0.2); "
-                                   "border-radius: 10px;")
+                                   "border-radius: 10px; margin-top: 12px;")
                                .arg(colors::dark::kAccentPrimary));
   layout->addWidget(infoLabel);
 
@@ -1030,6 +1120,108 @@ void SettingsWidget::onLaunchOnStartupChanged(int state) {
 #endif
 }
 
+void SettingsWidget::onCreateDesktopShortcut() {
+#ifdef _WIN32
+  // Get the path to the main launcher executable
+  QString appPath = QApplication::applicationFilePath();
+
+  // Replace veil-client-gui.exe with veil-vpn.exe (the unified launcher)
+  QFileInfo appInfo(appPath);
+  QString launcherPath = appInfo.absolutePath() + "/veil-vpn.exe";
+
+  // Check if the launcher exists, otherwise fall back to the current executable
+  if (!QFileInfo::exists(launcherPath)) {
+    launcherPath = appPath;
+    qWarning() << "[SettingsWidget] Launcher not found at" << launcherPath << ", using current executable";
+  }
+
+  std::string error;
+  bool success = veil::windows::ShortcutManager::createShortcut(
+      veil::windows::ShortcutManager::Location::kDesktop,
+      "VEIL VPN",
+      launcherPath.toStdString(),
+      "",  // arguments
+      "VEIL VPN Client - Secure VPN Connection",
+      "",  // icon_path (use executable's icon)
+      0,   // icon_index
+      "",  // working_dir (use executable's directory)
+      error
+  );
+
+  if (success) {
+    desktopShortcutStatusLabel_->setText("✓ Created");
+    desktopShortcutStatusLabel_->setStyleSheet("color: #3fb950; font-size: 12px;");
+    createDesktopShortcutButton_->setEnabled(false);
+    qDebug() << "[SettingsWidget] Desktop shortcut created successfully";
+
+    QMessageBox::information(this, "Success",
+        "Desktop shortcut created successfully!\n\n"
+        "You can now launch VEIL VPN from your desktop.");
+  } else {
+    desktopShortcutStatusLabel_->setText("✗ Failed");
+    desktopShortcutStatusLabel_->setStyleSheet("color: #f85149; font-size: 12px;");
+    qWarning() << "[SettingsWidget] Failed to create desktop shortcut:" << QString::fromStdString(error);
+
+    QMessageBox::warning(this, "Error",
+        QString("Failed to create desktop shortcut:\n\n%1").arg(QString::fromStdString(error)));
+  }
+#else
+  QMessageBox::information(this, "Not Available",
+      "Shortcut creation is only available on Windows.");
+#endif
+}
+
+void SettingsWidget::onCreateStartMenuShortcut() {
+#ifdef _WIN32
+  // Get the path to the main launcher executable
+  QString appPath = QApplication::applicationFilePath();
+
+  // Replace veil-client-gui.exe with veil-vpn.exe (the unified launcher)
+  QFileInfo appInfo(appPath);
+  QString launcherPath = appInfo.absolutePath() + "/veil-vpn.exe";
+
+  // Check if the launcher exists, otherwise fall back to the current executable
+  if (!QFileInfo::exists(launcherPath)) {
+    launcherPath = appPath;
+    qWarning() << "[SettingsWidget] Launcher not found at" << launcherPath << ", using current executable";
+  }
+
+  std::string error;
+  bool success = veil::windows::ShortcutManager::createShortcut(
+      veil::windows::ShortcutManager::Location::kStartMenu,
+      "VEIL VPN",
+      launcherPath.toStdString(),
+      "",  // arguments
+      "VEIL VPN Client - Secure VPN Connection",
+      "",  // icon_path (use executable's icon)
+      0,   // icon_index
+      "",  // working_dir (use executable's directory)
+      error
+  );
+
+  if (success) {
+    startMenuShortcutStatusLabel_->setText("✓ Created");
+    startMenuShortcutStatusLabel_->setStyleSheet("color: #3fb950; font-size: 12px;");
+    createStartMenuShortcutButton_->setEnabled(false);
+    qDebug() << "[SettingsWidget] Start Menu shortcut created successfully";
+
+    QMessageBox::information(this, "Success",
+        "Start Menu entry created successfully!\n\n"
+        "You can now find VEIL VPN in your Start Menu.");
+  } else {
+    startMenuShortcutStatusLabel_->setText("✗ Failed");
+    startMenuShortcutStatusLabel_->setStyleSheet("color: #f85149; font-size: 12px;");
+    qWarning() << "[SettingsWidget] Failed to create Start Menu shortcut:" << QString::fromStdString(error);
+
+    QMessageBox::warning(this, "Error",
+        QString("Failed to create Start Menu entry:\n\n%1").arg(QString::fromStdString(error)));
+  }
+#else
+  QMessageBox::information(this, "Not Available",
+      "Shortcut creation is only available on Windows.");
+#endif
+}
+
 void SettingsWidget::validateSettings() {
   bool allValid = true;
 
@@ -1191,6 +1383,30 @@ void SettingsWidget::loadSettings() {
   launchOnWindowsStartupCheck_->setChecked(inStartup);
   // Update our settings to match registry
   settings.setValue("startup/launchOnWindowsStartup", inStartup);
+
+  // Check if shortcuts already exist
+  bool desktopShortcutExists = veil::windows::ShortcutManager::shortcutExists(
+      veil::windows::ShortcutManager::Location::kDesktop, "VEIL VPN");
+  bool startMenuShortcutExists = veil::windows::ShortcutManager::shortcutExists(
+      veil::windows::ShortcutManager::Location::kStartMenu, "VEIL VPN");
+
+  if (desktopShortcutExists) {
+    desktopShortcutStatusLabel_->setText("✓ Already exists");
+    desktopShortcutStatusLabel_->setStyleSheet("color: #3fb950; font-size: 12px;");
+    createDesktopShortcutButton_->setEnabled(false);
+  } else {
+    desktopShortcutStatusLabel_->setText("");
+    createDesktopShortcutButton_->setEnabled(true);
+  }
+
+  if (startMenuShortcutExists) {
+    startMenuShortcutStatusLabel_->setText("✓ Already exists");
+    startMenuShortcutStatusLabel_->setStyleSheet("color: #3fb950; font-size: 12px;");
+    createStartMenuShortcutButton_->setEnabled(false);
+  } else {
+    startMenuShortcutStatusLabel_->setText("");
+    createStartMenuShortcutButton_->setEnabled(true);
+  }
 #else
   launchOnWindowsStartupCheck_->setChecked(false);
   launchOnWindowsStartupCheck_->setEnabled(false);

@@ -18,6 +18,10 @@
 #include "common/gui/theme.h"
 #include "common/version.h"
 
+#ifdef _WIN32
+#include "windows/shortcut_manager.h"
+#endif
+
 namespace veil::gui {
 
 namespace {
@@ -493,6 +497,31 @@ QWidget* SetupWizard::createFinishPage() {
   testResultLabel_->setVisible(false);
   layout->addWidget(testResultLabel_);
 
+  layout->addSpacing(16);
+
+  // Shortcut creation options
+#ifdef _WIN32
+  auto* shortcutsGroup = new QGroupBox(tr("SHORTCUTS"), page);
+  auto* shortcutsLayout = new QVBoxLayout(shortcutsGroup);
+  shortcutsLayout->setSpacing(12);
+
+  createDesktopShortcutCheck_ = new QCheckBox(
+      tr("Create desktop shortcut"), shortcutsGroup);
+  createDesktopShortcutCheck_->setChecked(true);
+  createDesktopShortcutCheck_->setToolTip(
+      tr("Create a shortcut on your desktop for quick access"));
+  shortcutsLayout->addWidget(createDesktopShortcutCheck_);
+
+  createStartMenuShortcutCheck_ = new QCheckBox(
+      tr("Create Start Menu entry"), shortcutsGroup);
+  createStartMenuShortcutCheck_->setChecked(true);
+  createStartMenuShortcutCheck_->setToolTip(
+      tr("Add VEIL VPN to your Start Menu"));
+  shortcutsLayout->addWidget(createStartMenuShortcutCheck_);
+
+  layout->addWidget(shortcutsGroup);
+#endif
+
   // Info
   auto* infoLabel = new QLabel(
       tr("You can change any of these settings later from the Settings view."),
@@ -540,6 +569,70 @@ void SetupWizard::onSkipClicked() {
 void SetupWizard::onFinishClicked() {
   qDebug() << "[SetupWizard] User completed setup wizard";
   saveAllSettings();
+
+#ifdef _WIN32
+  // Create shortcuts if requested
+  if (createDesktopShortcutCheck_ && createDesktopShortcutCheck_->isChecked()) {
+    QString appPath = QApplication::applicationFilePath();
+    QFileInfo appInfo(appPath);
+    QString launcherPath = appInfo.absolutePath() + "/veil-vpn.exe";
+
+    if (!QFileInfo::exists(launcherPath)) {
+      launcherPath = appPath;
+    }
+
+    std::string error;
+    bool success = veil::windows::ShortcutManager::createShortcut(
+        veil::windows::ShortcutManager::Location::kDesktop,
+        "VEIL VPN",
+        launcherPath.toStdString(),
+        "",
+        "VEIL VPN Client - Secure VPN Connection",
+        "",
+        0,
+        "",
+        error
+    );
+
+    if (success) {
+      qDebug() << "[SetupWizard] Desktop shortcut created successfully";
+    } else {
+      qWarning() << "[SetupWizard] Failed to create desktop shortcut:"
+                 << QString::fromStdString(error);
+    }
+  }
+
+  if (createStartMenuShortcutCheck_ && createStartMenuShortcutCheck_->isChecked()) {
+    QString appPath = QApplication::applicationFilePath();
+    QFileInfo appInfo(appPath);
+    QString launcherPath = appInfo.absolutePath() + "/veil-vpn.exe";
+
+    if (!QFileInfo::exists(launcherPath)) {
+      launcherPath = appPath;
+    }
+
+    std::string error;
+    bool success = veil::windows::ShortcutManager::createShortcut(
+        veil::windows::ShortcutManager::Location::kStartMenu,
+        "VEIL VPN",
+        launcherPath.toStdString(),
+        "",
+        "VEIL VPN Client - Secure VPN Connection",
+        "",
+        0,
+        "",
+        error
+    );
+
+    if (success) {
+      qDebug() << "[SetupWizard] Start Menu shortcut created successfully";
+    } else {
+      qWarning() << "[SetupWizard] Failed to create Start Menu shortcut:"
+                 << QString::fromStdString(error);
+    }
+  }
+#endif
+
   markFirstRunComplete();
   emit wizardCompleted();
 }
