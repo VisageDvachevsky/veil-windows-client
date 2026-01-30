@@ -13,10 +13,10 @@ class CongestionControllerTest : public ::testing::Test {
  protected:
   void SetUp() override {
     now_ = std::chrono::steady_clock::now();
-    config_.initial_cwnd = 10 * 1400;      // 10 MSS
+    config_.initial_cwnd = static_cast<std::size_t>(10) * 1400;      // 10 MSS
     config_.min_cwnd = 1400;                // 1 MSS
-    config_.max_cwnd = 64 * 1024 * 1024;    // 64 MB
-    config_.initial_ssthresh = 64 * 1024;   // 64 KB for testing
+    config_.max_cwnd = static_cast<std::size_t>(64) * 1024 * 1024;    // 64 MB
+    config_.initial_ssthresh = static_cast<std::size_t>(64) * 1024;   // 64 KB for testing
     config_.mss = 1400;
     config_.fast_retransmit_threshold = 3;
     config_.enable_pacing = false;          // Disable pacing for most tests
@@ -53,7 +53,7 @@ TEST_F(CongestionControllerTest, SlowStartExponentialGrowth) {
 
 TEST_F(CongestionControllerTest, SlowStartExitAtSsthresh) {
   config_.initial_cwnd = 1400;  // Start small
-  config_.initial_ssthresh = 5 * 1400;  // 5 MSS
+  config_.initial_ssthresh = static_cast<std::size_t>(5) * 1400;  // 5 MSS
 
   CongestionController cc(config_, [this]() { return now_; });
 
@@ -73,8 +73,8 @@ TEST_F(CongestionControllerTest, SlowStartExitAtSsthresh) {
 // ========== Congestion Avoidance Tests ==========
 
 TEST_F(CongestionControllerTest, CongestionAvoidanceLinearGrowth) {
-  config_.initial_cwnd = 10 * 1400;      // Start above ssthresh
-  config_.initial_ssthresh = 5 * 1400;   // Lower ssthresh
+  config_.initial_cwnd = static_cast<std::size_t>(10) * 1400;      // Start above ssthresh
+  config_.initial_ssthresh = static_cast<std::size_t>(5) * 1400;   // Lower ssthresh
 
   CongestionController cc(config_, [this]() { return now_; });
 
@@ -111,7 +111,7 @@ TEST_F(CongestionControllerTest, DuplicateAckCounting) {
 }
 
 TEST_F(CongestionControllerTest, FastRetransmitReducesCwnd) {
-  config_.initial_cwnd = 20 * 1400;  // 20 MSS
+  config_.initial_cwnd = static_cast<std::size_t>(20) * 1400;  // 20 MSS
 
   CongestionController cc(config_, [this]() { return now_; });
 
@@ -133,7 +133,7 @@ TEST_F(CongestionControllerTest, FastRetransmitReducesCwnd) {
 }
 
 TEST_F(CongestionControllerTest, FastRecoveryInflation) {
-  config_.initial_cwnd = 20 * 1400;
+  config_.initial_cwnd = static_cast<std::size_t>(20) * 1400;
 
   CongestionController cc(config_, [this]() { return now_; });
 
@@ -151,7 +151,7 @@ TEST_F(CongestionControllerTest, FastRecoveryInflation) {
 }
 
 TEST_F(CongestionControllerTest, FastRecoveryDeflation) {
-  config_.initial_cwnd = 20 * 1400;
+  config_.initial_cwnd = static_cast<std::size_t>(20) * 1400;
 
   CongestionController cc(config_, [this]() { return now_; });
 
@@ -174,7 +174,7 @@ TEST_F(CongestionControllerTest, FastRecoveryDeflation) {
 // ========== Timeout Tests ==========
 
 TEST_F(CongestionControllerTest, TimeoutReducesCwndToMinimum) {
-  config_.initial_cwnd = 20 * 1400;
+  config_.initial_cwnd = static_cast<std::size_t>(20) * 1400;
 
   CongestionController cc(config_, [this]() { return now_; });
 
@@ -361,7 +361,7 @@ TEST_F(CongestionControllerTest, ZeroAckBytesIgnored) {
 }
 
 TEST_F(CongestionControllerTest, SsthreshMinimum) {
-  config_.initial_cwnd = 2 * 1400;  // 2 MSS
+  config_.initial_cwnd = static_cast<std::size_t>(2) * 1400;  // 2 MSS
 
   CongestionController cc(config_, [this]() { return now_; });
 
@@ -372,7 +372,7 @@ TEST_F(CongestionControllerTest, SsthreshMinimum) {
 }
 
 TEST_F(CongestionControllerTest, CwndMaxEnforced) {
-  config_.max_cwnd = 5 * 1400;  // Small max for testing.
+  config_.max_cwnd = static_cast<std::size_t>(5) * 1400;  // Small max for testing.
 
   CongestionController cc(config_, [this]() { return now_; });
 
