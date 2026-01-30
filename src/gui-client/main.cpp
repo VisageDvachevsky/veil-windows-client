@@ -1,6 +1,10 @@
 #include <QApplication>
 #include <QMessageBox>
 #include <QDebug>
+#include <QTranslator>
+#include <QLocale>
+#include <QSettings>
+#include <QLibraryInfo>
 
 #ifdef QT_NETWORK_LIB
 #include <QSslSocket>
@@ -52,6 +56,58 @@ int main(int argc, char* argv[]) {
   app.setOrganizationDomain("veil.local");
   app.setApplicationName("VEIL Client");
   app.setApplicationVersion("0.1.0");
+
+  // Load translations
+  QSettings settings("VEIL", "VPN Client");
+  QString languageCode = settings.value("ui/language", "en").toString();
+
+  // Auto-detect system language if not set or invalid
+  QStringList supportedLanguages = {"en", "ru", "zh"};
+  if (!supportedLanguages.contains(languageCode)) {
+    // Try to use system locale
+    QString systemLocale = QLocale::system().name();  // e.g., "en_US", "ru_RU", "zh_CN"
+    QString systemLang = systemLocale.left(2);  // Get language code (first 2 chars)
+
+    if (supportedLanguages.contains(systemLang)) {
+      languageCode = systemLang;
+      qDebug() << "Auto-detected system language:" << systemLang;
+    } else {
+      languageCode = "en";  // Default to English
+      qDebug() << "System language not supported, defaulting to English";
+    }
+  }
+
+  qDebug() << "Loading translations for language:" << languageCode;
+
+  // Load Qt's built-in translations (for standard dialogs)
+  QTranslator qtTranslator;
+  if (qtTranslator.load("qt_" + languageCode, QLibraryInfo::path(QLibraryInfo::TranslationsPath))) {
+    app.installTranslator(&qtTranslator);
+    qDebug() << "Loaded Qt base translations for" << languageCode;
+  } else {
+    qDebug() << "Failed to load Qt base translations for" << languageCode;
+  }
+
+  // Load application translations
+  QTranslator appTranslator;
+  QString translationsPath = QCoreApplication::applicationDirPath() + "/translations";
+  QString translationFile = "veil_" + languageCode;
+
+  qDebug() << "Looking for translation file:" << translationFile << "in" << translationsPath;
+
+  if (appTranslator.load(translationFile, translationsPath)) {
+    app.installTranslator(&appTranslator);
+    qDebug() << "Successfully loaded application translations:" << translationFile;
+  } else {
+    // Try to load from resource path (for bundled translations)
+    if (appTranslator.load(":/translations/" + translationFile)) {
+      app.installTranslator(&appTranslator);
+      qDebug() << "Successfully loaded application translations from resources:" << translationFile;
+    } else {
+      qDebug() << "Warning: Failed to load application translations for" << languageCode;
+      qDebug() << "Tried paths:" << translationsPath << "and :/translations/";
+    }
+  }
 
 #ifdef _WIN32
   // On Windows, check if we have admin rights. If not, request elevation.

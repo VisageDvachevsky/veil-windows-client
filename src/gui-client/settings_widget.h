@@ -33,6 +33,7 @@ class SettingsWidget : public QWidget {
   void backRequested();
   void settingsSaved();
   void themeChanged(Theme theme);
+  void languageChanged(const QString& language);
 
  public slots:
   /// Load settings from config file
@@ -123,6 +124,7 @@ class SettingsWidget : public QWidget {
   QCheckBox* verboseLoggingCheck_;
   QCheckBox* developerModeCheck_;
   QComboBox* themeCombo_;
+  QComboBox* languageCombo_;
 
   // Buttons
   QPushButton* saveButton_;

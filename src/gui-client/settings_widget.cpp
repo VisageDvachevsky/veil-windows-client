@@ -662,6 +662,34 @@ QWidget* SettingsWidget::createAdvancedSection() {
   themeLayout->addWidget(themeCombo_, 1);
   layout->addLayout(themeLayout);
 
+  // Language selector
+  auto* languageLayout = new QHBoxLayout();
+  auto* languageLabel = new QLabel("Language:", group);
+  languageCombo_ = new QComboBox(group);
+  languageCombo_->addItem("English", "en");
+  languageCombo_->addItem("Русский (Russian)", "ru");
+  languageCombo_->addItem("中文 (Chinese)", "zh");
+  languageCombo_->setToolTip("Select application language (requires restart)");
+  connect(languageCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, [this]() {
+            hasUnsavedChanges_ = true;
+          });
+  languageLayout->addWidget(languageLabel);
+  languageLayout->addWidget(languageCombo_, 1);
+  layout->addLayout(languageLayout);
+
+  // Language change info label
+  auto* langInfoLabel = new QLabel(
+      "Note: Application must be restarted for language changes to take effect.",
+      group);
+  langInfoLabel->setWordWrap(true);
+  langInfoLabel->setStyleSheet(QString("color: %1; font-size: 12px; padding: 12px; "
+                                      "background: rgba(88, 166, 255, 0.08); "
+                                      "border: 1px solid rgba(88, 166, 255, 0.2); "
+                                      "border-radius: 10px;")
+                                  .arg(colors::dark::kAccentPrimary));
+  layout->addWidget(langInfoLabel);
+
   return group;
 }
 
@@ -896,6 +924,14 @@ void SettingsWidget::loadSettings() {
     themeCombo_->setCurrentIndex(themeIndex);
   }
 
+  // Language
+  QString languageCode = settings.value("ui/language", "en").toString();
+  // Find and set the combo box index for the language
+  int languageIndex = languageCombo_->findData(languageCode);
+  if (languageIndex >= 0) {
+    languageCombo_->setCurrentIndex(languageIndex);
+  }
+
   hasUnsavedChanges_ = false;
   validateSettings();
 }
@@ -960,6 +996,16 @@ void SettingsWidget::saveSettings() {
 
   // Theme
   settings.setValue("ui/theme", themeCombo_->currentData().toInt());
+
+  // Language
+  QString currentLanguage = settings.value("ui/language", "en").toString();
+  QString newLanguage = languageCombo_->currentData().toString();
+  settings.setValue("ui/language", newLanguage);
+
+  // Emit signal if language changed
+  if (currentLanguage != newLanguage) {
+    emit languageChanged(newLanguage);
+  }
 
   settings.sync();
   hasUnsavedChanges_ = false;
