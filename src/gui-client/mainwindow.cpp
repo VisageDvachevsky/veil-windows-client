@@ -129,37 +129,50 @@ MainWindow::MainWindow(QWidget* parent)
   applyDarkTheme();
   qDebug() << "MainWindow: GUI components initialized";
 
-  // Attempt to connect to daemon, auto-start service on Windows if not running
+  // Attempt to connect to daemon
+  // With SERVICE_AUTO_START, the service should already be running on Windows.
+  // If not yet ready (e.g., delayed auto-start), retry after a brief delay.
   qDebug() << "MainWindow: Attempting to connect to VEIL daemon...";
   if (!ipcManager_->connectToDaemon()) {
     qWarning() << "MainWindow: Failed to connect to daemon on first attempt";
 #ifdef _WIN32
-    // On Windows, automatically start the service if not running
-    qDebug() << "MainWindow: Attempting to ensure VEIL service is running...";
-    if (ensureServiceRunning()) {
-      qDebug() << "MainWindow: Service startup succeeded, waiting for IPC server to be ready...";
-      // Wait for the service's IPC Named Pipe to be available before connecting
-      if (waitForServiceReady(5000)) {
-        qDebug() << "MainWindow: Service IPC is ready, connecting...";
-        if (!ipcManager_->connectToDaemon()) {
-          qWarning() << "MainWindow: Failed to connect to daemon after service ready";
-          statusBar()->showMessage(tr("Failed to connect to daemon after service start"), 5000);
+    // Service uses delayed auto-start, so it may still be starting.
+    // Retry connection after a short delay before falling back to manual start.
+    qDebug() << "MainWindow: Service may still be starting (delayed auto-start), retrying soon...";
+    statusBar()->showMessage(tr("Waiting for VEIL service to start..."));
+    QTimer::singleShot(3000, this, [this]() {
+      qDebug() << "MainWindow: Retrying daemon connection...";
+      if (!ipcManager_->connectToDaemon()) {
+        qWarning() << "MainWindow: Retry failed, attempting to ensure service is running...";
+        if (ensureServiceRunning()) {
+          qDebug() << "MainWindow: Service startup succeeded, waiting for IPC server to be ready...";
+          // Wait for the service's IPC Named Pipe to be available before connecting
+          if (waitForServiceReady(5000)) {
+            qDebug() << "MainWindow: Service IPC is ready, connecting...";
+            if (!ipcManager_->connectToDaemon()) {
+              qWarning() << "MainWindow: Failed to connect to daemon after service ready";
+              statusBar()->showMessage(tr("Failed to connect to daemon after service start"), 5000);
+            } else {
+              qDebug() << "MainWindow: Successfully connected to daemon after service start";
+            }
+          } else {
+            qWarning() << "MainWindow: Timed out waiting for service IPC, attempting connection anyway...";
+            if (!ipcManager_->connectToDaemon()) {
+              qWarning() << "MainWindow: Failed to connect to daemon after timeout";
+              statusBar()->showMessage(tr("Failed to connect to daemon after service start"), 5000);
+            } else {
+              qDebug() << "MainWindow: Successfully connected to daemon despite timeout";
+            }
+          }
         } else {
-          qDebug() << "MainWindow: Successfully connected to daemon after service start";
+          qWarning() << "MainWindow: Failed to ensure service is running";
+          statusBar()->showMessage(tr("Failed to start VEIL service - run as administrator"), 5000);
         }
       } else {
-        qWarning() << "MainWindow: Timed out waiting for service IPC, attempting connection anyway...";
-        if (!ipcManager_->connectToDaemon()) {
-          qWarning() << "MainWindow: Failed to connect to daemon after timeout";
-          statusBar()->showMessage(tr("Failed to connect to daemon after service start"), 5000);
-        } else {
-          qDebug() << "MainWindow: Successfully connected to daemon despite timeout";
-        }
+        qDebug() << "MainWindow: Successfully connected to daemon on retry";
+        statusBar()->showMessage(tr("Connected to daemon"), 3000);
       }
-    } else {
-      qWarning() << "MainWindow: Failed to ensure service is running";
-      statusBar()->showMessage(tr("Failed to start VEIL service - run as administrator"), 5000);
-    }
+    });
 #else
     statusBar()->showMessage(tr("Daemon not running - start veil-client first"), 5000);
 #endif
