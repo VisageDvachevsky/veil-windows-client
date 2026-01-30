@@ -12,6 +12,8 @@
 
 namespace veil::gui {
 
+class ServerSelectorWidget;
+
 /// Connection states as defined in the UI design spec
 enum class ConnectionState {
   kDisconnected,
@@ -30,6 +32,7 @@ class ConnectionWidget : public QWidget {
 
  signals:
   void settingsRequested();
+  void serversRequested();
   void connectRequested();
   void disconnectRequested();
 
@@ -93,6 +96,7 @@ class ConnectionWidget : public QWidget {
 
   // Navigation
   QPushButton* settingsButton_;
+  ServerSelectorWidget* serverSelector_;
 
   // State
   ConnectionState state_{ConnectionState::kDisconnected};
