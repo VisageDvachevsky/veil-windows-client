@@ -213,13 +213,13 @@ StatisticsWidget::StatisticsWidget(QWidget* parent) : QWidget(parent) {
 void StatisticsWidget::setupUi() {
   auto* mainLayout = new QVBoxLayout(this);
   mainLayout->setSpacing(0);
-  mainLayout->setContentsMargins(spacing::kPaddingXLarge, spacing::kPaddingLarge,
-                                  spacing::kPaddingXLarge, spacing::kPaddingLarge);
+  mainLayout->setContentsMargins(spacing::kPaddingXLarge(), spacing::kPaddingLarge(),
+                                  spacing::kPaddingXLarge(), spacing::kPaddingLarge());
 
   // === Header ===
   auto* headerWidget = new QWidget(this);
   auto* headerLayout = new QHBoxLayout(headerWidget);
-  headerLayout->setContentsMargins(0, 0, 0, spacing::kPaddingMedium);
+  headerLayout->setContentsMargins(0, 0, 0, spacing::kPaddingMedium());
 
   auto* backButton = new QPushButton("\u2190", this);  // Left arrow
   backButton->setFixedSize(40, 40);
@@ -247,7 +247,7 @@ void StatisticsWidget::setupUi() {
     font-weight: 600;
     color: %2;
     padding-left: 12px;
-  )").arg(fonts::kFontSizeTitle).arg(colors::dark::kTextPrimary));
+  )").arg(fonts::kFontSizeTitle()).arg(colors::dark::kTextPrimary));
   headerLayout->addWidget(titleLabel);
   headerLayout->addStretch();
 
@@ -285,7 +285,7 @@ void StatisticsWidget::setupUi() {
   auto* scrollContent = new QWidget(scrollArea);
   scrollContent->setStyleSheet("background: transparent;");
   auto* contentLayout = new QVBoxLayout(scrollContent);
-  contentLayout->setSpacing(spacing::kPaddingMedium);
+  contentLayout->setSpacing(spacing::kPaddingMedium());
   contentLayout->setContentsMargins(0, 0, 0, 0);
 
   // Bandwidth graph section

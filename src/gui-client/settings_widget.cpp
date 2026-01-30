@@ -31,8 +31,8 @@ SettingsWidget::SettingsWidget(QWidget* parent) : QWidget(parent) {
 void SettingsWidget::setupUi() {
   auto* mainLayout = new QVBoxLayout(this);
   mainLayout->setSpacing(20);
-  mainLayout->setContentsMargins(spacing::kPaddingXLarge, spacing::kPaddingMedium,
-                                  spacing::kPaddingXLarge, spacing::kPaddingMedium);
+  mainLayout->setContentsMargins(spacing::kPaddingXLarge(), spacing::kPaddingMedium(),
+                                  spacing::kPaddingXLarge(), spacing::kPaddingMedium());
 
   // === Header ===
   auto* headerLayout = new QHBoxLayout();
@@ -63,7 +63,7 @@ void SettingsWidget::setupUi() {
   auto* titleRow = new QHBoxLayout();
   auto* titleLabel = new QLabel("Settings", this);
   titleLabel->setStyleSheet(QString("font-size: %1px; font-weight: 700; color: #f0f6fc; margin-bottom: 8px;")
-                                .arg(fonts::kFontSizeHeadline));
+                                .arg(fonts::kFontSizeHeadline()));
   titleRow->addWidget(titleLabel);
 
   titleRow->addStretch();
@@ -260,7 +260,7 @@ QWidget* SettingsWidget::createServerSection() {
   serverRow->addWidget(serverAddressEdit_, 1);
 
   serverValidationIndicator_ = new QLabel(group);
-  serverValidationIndicator_->setFixedSize(24, 24);
+  serverValidationIndicator_->setFixedSize(scaleDpi(24), scaleDpi(24));
   serverValidationIndicator_->setAlignment(Qt::AlignCenter);
   serverValidationIndicator_->setStyleSheet("font-size: 18px;");
   serverRow->addWidget(serverValidationIndicator_);
@@ -281,7 +281,7 @@ QWidget* SettingsWidget::createServerSection() {
   portSpinBox_ = new QSpinBox(group);
   portSpinBox_->setRange(1, 65535);
   portSpinBox_->setValue(4433);
-  portSpinBox_->setFixedWidth(100);
+  portSpinBox_->setFixedWidth(scaleDpi(100));
   connect(portSpinBox_, QOverload<int>::of(&QSpinBox::valueChanged), this, &SettingsWidget::onPortChanged);
   portRow->addWidget(portSpinBox_);
 
@@ -311,13 +311,13 @@ QWidget* SettingsWidget::createCryptoSection() {
   keyFileRow->addWidget(keyFileEdit_, 1);
 
   keyFileValidationIndicator_ = new QLabel(group);
-  keyFileValidationIndicator_->setFixedSize(24, 24);
+  keyFileValidationIndicator_->setFixedSize(scaleDpi(24), scaleDpi(24));
   keyFileValidationIndicator_->setAlignment(Qt::AlignCenter);
   keyFileValidationIndicator_->setStyleSheet("font-size: 18px;");
   keyFileRow->addWidget(keyFileValidationIndicator_);
 
   browseKeyFileButton_ = new QPushButton("\U0001F4C2", group);  // Folder icon
-  browseKeyFileButton_->setFixedSize(40, 40);
+  browseKeyFileButton_->setFixedSize(scaleDpi(40), scaleDpi(40));
   browseKeyFileButton_->setCursor(Qt::PointingHandCursor);
   browseKeyFileButton_->setToolTip("Browse for key file");
   browseKeyFileButton_->setStyleSheet(R"(
@@ -356,13 +356,13 @@ QWidget* SettingsWidget::createCryptoSection() {
   obfuscationRow->addWidget(obfuscationSeedEdit_, 1);
 
   obfuscationSeedValidationIndicator_ = new QLabel(group);
-  obfuscationSeedValidationIndicator_->setFixedSize(24, 24);
+  obfuscationSeedValidationIndicator_->setFixedSize(scaleDpi(24), scaleDpi(24));
   obfuscationSeedValidationIndicator_->setAlignment(Qt::AlignCenter);
   obfuscationSeedValidationIndicator_->setStyleSheet("font-size: 18px;");
   obfuscationRow->addWidget(obfuscationSeedValidationIndicator_);
 
   browseObfuscationSeedButton_ = new QPushButton("\U0001F4C2", group);  // Folder icon
-  browseObfuscationSeedButton_->setFixedSize(40, 40);
+  browseObfuscationSeedButton_->setFixedSize(scaleDpi(40), scaleDpi(40));
   browseObfuscationSeedButton_->setCursor(Qt::PointingHandCursor);
   browseObfuscationSeedButton_->setToolTip("Browse for obfuscation seed file");
   browseObfuscationSeedButton_->setStyleSheet(R"(
@@ -461,7 +461,7 @@ QWidget* SettingsWidget::createConnectionSection() {
   reconnectIntervalSpinBox_->setRange(1, 60);
   reconnectIntervalSpinBox_->setValue(5);
   reconnectIntervalSpinBox_->setSuffix(" sec");
-  reconnectIntervalSpinBox_->setFixedWidth(100);
+  reconnectIntervalSpinBox_->setFixedWidth(scaleDpi(100));
   intervalRow->addWidget(reconnectIntervalSpinBox_);
 
   layout->addLayout(intervalRow);
@@ -477,7 +477,7 @@ QWidget* SettingsWidget::createConnectionSection() {
   maxReconnectAttemptsSpinBox_->setRange(0, 100);
   maxReconnectAttemptsSpinBox_->setValue(5);
   maxReconnectAttemptsSpinBox_->setSpecialValueText("Unlimited");
-  maxReconnectAttemptsSpinBox_->setFixedWidth(100);
+  maxReconnectAttemptsSpinBox_->setFixedWidth(scaleDpi(100));
   attemptsRow->addWidget(maxReconnectAttemptsSpinBox_);
 
   layout->addLayout(attemptsRow);
@@ -552,7 +552,7 @@ QWidget* SettingsWidget::createTunInterfaceSection() {
   ipRow->addWidget(tunIpAddressEdit_, 1);
 
   tunIpValidationIndicator_ = new QLabel(group);
-  tunIpValidationIndicator_->setFixedSize(24, 24);
+  tunIpValidationIndicator_->setFixedSize(scaleDpi(24), scaleDpi(24));
   tunIpValidationIndicator_->setAlignment(Qt::AlignCenter);
   tunIpValidationIndicator_->setStyleSheet("font-size: 18px;");
   ipRow->addWidget(tunIpValidationIndicator_);
@@ -579,7 +579,7 @@ QWidget* SettingsWidget::createTunInterfaceSection() {
   netmaskRow->addWidget(tunNetmaskEdit_, 1);
 
   tunNetmaskValidationIndicator_ = new QLabel(group);
-  tunNetmaskValidationIndicator_->setFixedSize(24, 24);
+  tunNetmaskValidationIndicator_->setFixedSize(scaleDpi(24), scaleDpi(24));
   tunNetmaskValidationIndicator_->setAlignment(Qt::AlignCenter);
   tunNetmaskValidationIndicator_->setStyleSheet("font-size: 18px;");
   netmaskRow->addWidget(tunNetmaskValidationIndicator_);
@@ -602,7 +602,7 @@ QWidget* SettingsWidget::createTunInterfaceSection() {
   tunMtuSpinBox_->setRange(576, 65535);
   tunMtuSpinBox_->setValue(1400);
   tunMtuSpinBox_->setSuffix(" bytes");
-  tunMtuSpinBox_->setFixedWidth(130);
+  tunMtuSpinBox_->setFixedWidth(scaleDpi(130));
   tunMtuSpinBox_->setToolTip("Recommended: 1400 for most networks");
   connect(tunMtuSpinBox_, QOverload<int>::of(&QSpinBox::valueChanged), [this]() {
     hasUnsavedChanges_ = true;
