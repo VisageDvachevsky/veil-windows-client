@@ -383,7 +383,7 @@ void StatisticsWidget::createConnectionHistorySection(QWidget* parent) {
   sectionLayout->addWidget(noHistoryLabel_);
 
   // Add to parent layout
-  if (auto* parentLayout = parent->layout()) {
+  if (auto* parentLayout = parent->layout(); parentLayout != nullptr) {
     parentLayout->addWidget(sectionCard);
   }
 }
@@ -442,7 +442,7 @@ void StatisticsWidget::updateHistoryDisplay() {
   auto* layout = historyContainer_->layout();
   QLayoutItem* item;
   while ((item = layout->takeAt(0)) != nullptr) {
-    if (item->widget()) {
+    if (item->widget() != nullptr) {
       item->widget()->deleteLater();
     }
     delete item;
