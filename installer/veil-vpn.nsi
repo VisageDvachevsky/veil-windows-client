@@ -74,6 +74,8 @@ Var IS_UPGRADE
 ; Header image and branding
 !define MUI_HEADERIMAGE
 !define MUI_HEADERIMAGE_RIGHT
+!define MUI_HEADERIMAGE_BITMAP "resources\header.bmp"
+!define MUI_WELCOMEFINISHPAGE_BITMAP "resources\banner.bmp"
 
 ; Welcome page - custom text for upgrade scenario
 !define MUI_WELCOMEPAGE_TITLE_3LINES
