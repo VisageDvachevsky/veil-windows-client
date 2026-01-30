@@ -11,6 +11,7 @@
 #include <QTimer>
 
 #include "collapsible_section.h"
+#include "app_split_tunnel_widget.h"
 #include "common/gui/theme.h"
 
 namespace veil::gui {
@@ -98,6 +99,8 @@ class SettingsWidget : public QWidget {
   QCheckBox* routeAllTrafficCheck_;
   QCheckBox* splitTunnelCheck_;
   QLineEdit* customRoutesEdit_;
+  QCheckBox* enablePerAppRoutingCheck_;
+  AppSplitTunnelWidget* appSplitTunnelWidget_;
 
   // Connection
   QCheckBox* autoReconnectCheck_;

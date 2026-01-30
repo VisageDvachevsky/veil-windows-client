@@ -438,6 +438,46 @@ QWidget* SettingsWidget::createRoutingSection() {
     }
   });
 
+  // Per-application routing (Phase 1: UI/UX foundation)
+  layout->addSpacing(12);
+
+  enablePerAppRoutingCheck_ = new QCheckBox("Enable per-application routing (Experimental)", group);
+  enablePerAppRoutingCheck_->setToolTip(
+    "Configure VPN routing on a per-application basis.\n"
+    "Note: This is a UI preview. Backend routing is not yet implemented.");
+  enablePerAppRoutingCheck_->setEnabled(false);  // Disabled until backend is ready
+  layout->addWidget(enablePerAppRoutingCheck_);
+
+  // App split tunnel widget (collapsible)
+  appSplitTunnelWidget_ = new AppSplitTunnelWidget(group);
+  appSplitTunnelWidget_->hide();  // Hidden by default
+  layout->addWidget(appSplitTunnelWidget_);
+
+  connect(enablePerAppRoutingCheck_, &QCheckBox::toggled, [this](bool checked) {
+    appSplitTunnelWidget_->setVisible(checked);
+    if (checked) {
+      hasUnsavedChanges_ = true;
+    }
+  });
+
+  connect(appSplitTunnelWidget_, &AppSplitTunnelWidget::settingsChanged, [this]() {
+    hasUnsavedChanges_ = true;
+  });
+
+  // Add informational label about experimental status
+  auto* infoLabel = new QLabel(
+    "\U0001F6A7 <b>Experimental Feature:</b> Per-application routing UI is available for preview. "
+    "Full routing functionality requires daemon integration and will be implemented in Phase 2.",
+    group);
+  infoLabel->setProperty("textStyle", "secondary");
+  infoLabel->setStyleSheet(QString("color: %1; font-size: 11px; padding: 8px; background-color: rgba(255, 165, 0, 0.1); border-radius: 4px;")
+                           .arg(colors::dark::kAccentWarning));
+  infoLabel->setWordWrap(true);
+  infoLabel->hide();  // Hidden by default
+  layout->addWidget(infoLabel);
+
+  connect(enablePerAppRoutingCheck_, &QCheckBox::toggled, infoLabel, &QLabel::setVisible);
+
   return group;
 }
 
@@ -888,6 +928,12 @@ void SettingsWidget::loadSettings() {
   routeAllTrafficCheck_->setChecked(settings.value("routing/routeAllTraffic", true).toBool());
   splitTunnelCheck_->setChecked(settings.value("routing/splitTunnel", false).toBool());
   customRoutesEdit_->setText(settings.value("routing/customRoutes", "").toString());
+  enablePerAppRoutingCheck_->setChecked(settings.value("routing/enablePerAppRouting", false).toBool());
+
+  // Load per-app routing settings
+  if (appSplitTunnelWidget_) {
+    appSplitTunnelWidget_->loadFromSettings();
+  }
 
   // Connection
   autoReconnectCheck_->setChecked(settings.value("connection/autoReconnect", true).toBool());
@@ -958,6 +1004,12 @@ void SettingsWidget::saveSettings() {
   settings.setValue("routing/routeAllTraffic", routeAllTrafficCheck_->isChecked());
   settings.setValue("routing/splitTunnel", splitTunnelCheck_->isChecked());
   settings.setValue("routing/customRoutes", customRoutesEdit_->text().trimmed());
+  settings.setValue("routing/enablePerAppRouting", enablePerAppRoutingCheck_->isChecked());
+
+  // Save per-app routing settings
+  if (appSplitTunnelWidget_) {
+    appSplitTunnelWidget_->saveToSettings();
+  }
 
   // Connection
   settings.setValue("connection/autoReconnect", autoReconnectCheck_->isChecked());
