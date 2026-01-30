@@ -1157,6 +1157,8 @@ const char* protocol_wrapper_to_string(ProtocolWrapperType wrapper) {
       return "None";
     case ProtocolWrapperType::kWebSocket:
       return "WebSocket";
+    case ProtocolWrapperType::kTLS:
+      return "TLS";
     default:
       return "Unknown";
   }
@@ -1168,6 +1170,9 @@ std::optional<ProtocolWrapperType> protocol_wrapper_from_string(const std::strin
   }
   if (str == "WebSocket" || str == "websocket" || str == "1") {
     return ProtocolWrapperType::kWebSocket;
+  }
+  if (str == "TLS" || str == "tls" || str == "2") {
+    return ProtocolWrapperType::kTLS;
   }
   return std::nullopt;
 }

@@ -68,6 +68,7 @@ enum class HeartbeatType : std::uint8_t {
 enum class ProtocolWrapperType : std::uint8_t {
   kNone = 0,       // No protocol wrapper (default)
   kWebSocket = 1,  // WebSocket binary frames (RFC 6455)
+  kTLS = 2,        // TLS 1.3 application data records (RFC 8446)
 };
 
 // DPI bypass mode presets for Windows GUI.
