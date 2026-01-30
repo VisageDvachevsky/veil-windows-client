@@ -48,19 +48,19 @@ void ServerStatusWidget::setupUi() {
       border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: %1px;
     }
-  )").arg(spacing::kBorderRadiusLarge));
+  )").arg(spacing::kBorderRadiusLarge()));
 
   auto* cardLayout = new QVBoxLayout(statusCard);
   cardLayout->setSpacing(20);
-  cardLayout->setContentsMargins(spacing::kPaddingLarge, spacing::kPaddingLarge,
-                                  spacing::kPaddingLarge, spacing::kPaddingLarge);
+  cardLayout->setContentsMargins(spacing::kPaddingLarge(), spacing::kPaddingLarge(),
+                                  spacing::kPaddingLarge(), spacing::kPaddingLarge());
 
   // === Status Header Row ===
   auto* headerRow = new QHBoxLayout();
 
   // Status indicator (pulsing dot)
   statusIndicator_ = new QWidget(this);
-  statusIndicator_->setFixedSize(16, 16);
+  statusIndicator_->setFixedSize(scaleDpi(16), scaleDpi(16));
   statusIndicator_->setStyleSheet(QString(R"(
     background: %1;
     border-radius: 8px;
@@ -71,7 +71,7 @@ void ServerStatusWidget::setupUi() {
 
   statusLabel_ = new QLabel("Stopped", this);
   statusLabel_->setStyleSheet(QString("font-size: %1px; font-weight: 600;")
-                                  .arg(fonts::kFontSizeTitle));
+                                  .arg(fonts::kFontSizeTitle()));
   headerRow->addWidget(statusLabel_);
 
   headerRow->addStretch();
@@ -97,7 +97,7 @@ void ServerStatusWidget::setupUi() {
       background: %1;
     }
   )").arg(colors::dark::kAccentSuccess, colors::dark::kAccentPrimary)
-    .arg(spacing::kBorderRadiusMedium));
+    .arg(spacing::kBorderRadiusMedium()));
   connect(startStopButton_, &QPushButton::clicked, this, &ServerStatusWidget::onStartStopClicked);
   headerRow->addWidget(startStopButton_);
 

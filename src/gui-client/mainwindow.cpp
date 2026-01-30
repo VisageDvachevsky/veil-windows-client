@@ -211,8 +211,8 @@ MainWindow::~MainWindow() = default;
 
 void MainWindow::setupUi() {
   setWindowTitle("VEIL VPN Client");
-  setMinimumSize(480, 720);
-  resize(480, 720);
+  setMinimumSize(scaleDpi(480), scaleDpi(720));
+  resize(scaleDpi(480), scaleDpi(720));
 
   // Set window icon from embedded resources
   setWindowIcon(QIcon(":/icons/icon_disconnected.svg"));
@@ -804,7 +804,7 @@ void MainWindow::showAboutDialog() {
   auto* dialog = new QDialog(this);
   dialog->setWindowTitle(tr("About VEIL"));
   dialog->setModal(true);
-  dialog->setFixedSize(420, 380);
+  dialog->setFixedSize(scaleDpi(420), scaleDpi(380));
 
   dialog->setStyleSheet(R"(
     QDialog {
@@ -836,7 +836,7 @@ void MainWindow::showAboutDialog() {
 
   // Logo placeholder
   auto* logoWidget = new QWidget(dialog);
-  logoWidget->setFixedSize(64, 64);
+  logoWidget->setFixedSize(scaleDpi(64), scaleDpi(64));
   logoWidget->setStyleSheet(R"(
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                                 stop:0 #238636, stop:1 #3fb950);
@@ -1133,7 +1133,7 @@ void MainWindow::onUpdateAvailable(const UpdateInfo& info) {
   auto* dialog = new QDialog(this);
   dialog->setWindowTitle(tr("Update Available"));
   dialog->setModal(true);
-  dialog->setFixedSize(450, 300);
+  dialog->setFixedSize(scaleDpi(450), scaleDpi(300));
 
   dialog->setStyleSheet(R"(
     QDialog {
