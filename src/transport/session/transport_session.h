@@ -14,6 +14,7 @@
 #include "common/session/session_rotator.h"
 #include "common/utils/thread_checker.h"
 #include "transport/mux/ack_bitmap.h"
+#include "transport/mux/congestion_controller.h"
 #include "transport/mux/fragment_reassembly.h"
 #include "transport/mux/mux_codec.h"
 #include "transport/mux/reorder_buffer.h"
@@ -39,6 +40,10 @@ struct TransportSessionConfig {
   std::size_t fragment_buffer_size{1 << 20};
   // Retransmit configuration.
   mux::RetransmitConfig retransmit_config{};
+  // Congestion control configuration.
+  mux::CongestionConfig congestion_config{};
+  // Enable congestion control.
+  bool enable_congestion_control{true};
 };
 
 // Statistics for observability.
@@ -142,6 +147,36 @@ class TransportSession {
   // Get retransmit buffer statistics.
   const mux::RetransmitStats& retransmit_stats() const { return retransmit_buffer_.stats(); }
 
+  // Get congestion control statistics.
+  const mux::CongestionStats& congestion_stats() const { return congestion_controller_.stats(); }
+
+  // ========== Congestion Control API ==========
+
+  // Check if we can send more data based on congestion window.
+  // bytes_in_flight is the current number of bytes awaiting acknowledgment.
+  bool can_send(std::size_t bytes_in_flight) const;
+
+  // Get the number of bytes that can be sent now.
+  std::size_t sendable_bytes(std::size_t bytes_in_flight) const;
+
+  // Get the current congestion window size.
+  std::size_t cwnd() const { return congestion_controller_.cwnd(); }
+
+  // Get the current slow start threshold.
+  std::size_t ssthresh() const { return congestion_controller_.ssthresh(); }
+
+  // Get the current congestion state.
+  mux::CongestionState congestion_state() const { return congestion_controller_.state(); }
+
+  // Get current bytes in flight (buffered bytes awaiting ACK).
+  std::size_t bytes_in_flight() const { return retransmit_buffer_.buffered_bytes(); }
+
+  // Check if pacing allows sending now.
+  bool check_pacing();
+
+  // Get time until pacing allows next send.
+  std::optional<std::chrono::microseconds> time_until_next_send() const;
+
  private:
   // Build an encrypted packet from mux frame.
   std::vector<std::uint8_t> build_encrypted_packet(const mux::MuxFrame& frame);
@@ -182,6 +217,13 @@ class TransportSession {
   mux::ReorderBuffer reorder_buffer_;
   mux::FragmentReassembly fragment_reassembly_;
   mux::RetransmitBuffer retransmit_buffer_;
+
+  // Congestion control (Issue #98).
+  mux::CongestionController congestion_controller_;
+
+  // Track last acknowledged sequence for duplicate ACK detection.
+  std::uint64_t last_ack_seq_{0};
+  std::uint32_t dup_ack_count_{0};
 
   // Message ID counter for fragmentation.
   std::uint64_t message_id_counter_{0};
