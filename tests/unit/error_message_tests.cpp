@@ -339,7 +339,7 @@ TEST(ErrorMessageTest, MultilineActionGuidance) {
 
 TEST(ErrorMessageTest, CopyConstructor) {
   ErrorMessage original(ErrorCategory::kNetwork, "Title", "Desc", "Action", "Details");
-  ErrorMessage copy = original;
+  ErrorMessage copy = original;  // NOLINT(performance-unnecessary-copy-initialization) - Testing copy constructor
 
   EXPECT_EQ(copy.category, original.category);
   EXPECT_EQ(copy.title, original.title);

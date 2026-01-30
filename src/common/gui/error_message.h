@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 
 namespace veil::gui {
 
@@ -24,10 +25,10 @@ struct ErrorMessage {
   ErrorMessage()
       : category(ErrorCategory::kUnknown) {}
 
-  ErrorMessage(ErrorCategory cat, const std::string& t, const std::string& desc,
-               const std::string& act, const std::string& details = "")
-      : category(cat), title(t), description(desc), action(act),
-        technical_details(details) {}
+  ErrorMessage(ErrorCategory cat, std::string t, std::string desc,
+               std::string act, std::string details = "")
+      : category(cat), title(std::move(t)), description(std::move(desc)),
+        action(std::move(act)), technical_details(std::move(details)) {}
 
   /// Get a user-friendly string representation
   std::string to_user_string() const {
