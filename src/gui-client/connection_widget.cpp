@@ -348,7 +348,7 @@ void ConnectionWidget::setupUi() {
   connect(serverSelector_, &ServerSelectorWidget::serverChanged,
           this, &ConnectionWidget::loadServerSettings);
   mainLayout->addWidget(serverSelector_);
-  mainLayout->addSpacing(spacing::kPaddingMedium);
+  mainLayout->addSpacing(spacing::kPaddingMedium());
 
   // === Connect Button (Large, prominent) ===
   connectButton_ = new QPushButton("Connect", this);
