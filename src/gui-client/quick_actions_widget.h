@@ -85,8 +85,8 @@ class QuickActionsWidget : public QWidget {
   QFrame* contentContainer_;
   QVBoxLayout* contentLayout_;
   QPropertyAnimation* animation_;
-  bool collapsed_;
-  int expandedHeight_;
+  bool collapsed_{true};
+  int expandedHeight_{0};
 
   // Action buttons
   QPushButton* killSwitchButton_;
@@ -101,7 +101,7 @@ class QuickActionsWidget : public QWidget {
   bool obfuscationEnabled_{true};
   QString ipAddress_;
   uint16_t port_{0};
-  ConnectionState connectionState_;
+  ConnectionState connectionState_{ConnectionState::kDisconnected};
 };
 
 }  // namespace veil::gui

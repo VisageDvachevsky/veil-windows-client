@@ -24,7 +24,7 @@ namespace veil::gui {
 class StatusRing : public QWidget {
  public:
   explicit StatusRing(QWidget* parent = nullptr) : QWidget(parent) {
-    setFixedSize(160, 160);
+    setFixedSize(scaleDpi(160), scaleDpi(160));
     setAttribute(Qt::WA_TranslucentBackground);
   }
 
@@ -179,13 +179,13 @@ ConnectionWidget::ConnectionWidget(QWidget* parent) : QWidget(parent) {
 void ConnectionWidget::setupUi() {
   auto* mainLayout = new QVBoxLayout(this);
   mainLayout->setSpacing(0);
-  mainLayout->setContentsMargins(spacing::kPaddingXLarge, spacing::kPaddingLarge,
-                                  spacing::kPaddingXLarge, spacing::kPaddingLarge);
+  mainLayout->setContentsMargins(spacing::kPaddingXLarge(), spacing::kPaddingLarge(),
+                                  spacing::kPaddingXLarge(), spacing::kPaddingLarge());
 
   // === Header with branding ===
   auto* headerWidget = new QWidget(this);
   auto* headerLayout = new QHBoxLayout(headerWidget);
-  headerLayout->setContentsMargins(0, 0, 0, spacing::kPaddingLarge);
+  headerLayout->setContentsMargins(0, 0, 0, spacing::kPaddingLarge());
 
   auto* logoContainer = new QWidget(headerWidget);
   auto* logoLayout = new QHBoxLayout(logoContainer);
@@ -194,7 +194,7 @@ void ConnectionWidget::setupUi() {
 
   // Logo icon placeholder
   auto* logoIcon = new QLabel(this);
-  logoIcon->setFixedSize(32, 32);
+  logoIcon->setFixedSize(scaleDpi(32), scaleDpi(32));
   logoIcon->setStyleSheet(R"(
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                                 stop:0 #238636, stop:1 #3fb950);
@@ -216,7 +216,7 @@ void ConnectionWidget::setupUi() {
 
   // Settings button with icon-style
   settingsButton_ = new QPushButton(this);
-  settingsButton_->setFixedSize(40, 40);
+  settingsButton_->setFixedSize(scaleDpi(40), scaleDpi(40));
   settingsButton_->setCursor(Qt::PointingHandCursor);
   settingsButton_->setToolTip("Settings (Ctrl+,)");
   settingsButton_->setStyleSheet(R"(
@@ -349,11 +349,11 @@ void ConnectionWidget::setupUi() {
   connect(serverSelector_, &ServerSelectorWidget::serverChanged,
           this, &ConnectionWidget::loadServerSettings);
   mainLayout->addWidget(serverSelector_);
-  mainLayout->addSpacing(spacing::kPaddingMedium);
+  mainLayout->addSpacing(spacing::kPaddingMedium());
 
   // === Connect Button (Large, prominent) ===
   connectButton_ = new QPushButton("Connect", this);
-  connectButton_->setMinimumHeight(64);
+  connectButton_->setMinimumHeight(scaleDpi(64));
   connectButton_->setCursor(Qt::PointingHandCursor);
   connectButton_->setToolTip("Connect to VPN (Ctrl+Enter)");
   connectButton_->setStyleSheet(R"(
@@ -379,7 +379,7 @@ void ConnectionWidget::setupUi() {
   connect(connectButton_, &QPushButton::clicked, this, &ConnectionWidget::onConnectClicked);
   mainLayout->addWidget(connectButton_);
 
-  mainLayout->addSpacing(spacing::kPaddingMedium);
+  mainLayout->addSpacing(spacing::kPaddingMedium());
 
   // === Quick Actions Panel ===
   quickActionsWidget_ = new QuickActionsWidget(this);
@@ -389,7 +389,7 @@ void ConnectionWidget::setupUi() {
           this, &ConnectionWidget::settingsRequested);
   mainLayout->addWidget(quickActionsWidget_);
 
-  mainLayout->addSpacing(spacing::kPaddingMedium);
+  mainLayout->addSpacing(spacing::kPaddingMedium());
 
   // === Session Info Card ===
   statusCard_ = new QWidget(this);
