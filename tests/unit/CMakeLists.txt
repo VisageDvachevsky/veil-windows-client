@@ -39,6 +39,7 @@ add_executable(veil_unit_tests
   hardware_crypto_tests.cpp
   websocket_wrapper_tests.cpp
   http_handshake_emulator_tests.cpp
+  tls_wrapper_tests.cpp
   packet_tests.cpp
   replay_window_tests.cpp
   handshake_tests.cpp

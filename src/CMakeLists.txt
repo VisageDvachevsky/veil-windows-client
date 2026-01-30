@@ -93,6 +93,7 @@ add_library(veil_common STATIC
   common/obfuscation/obfuscation_profile.cpp
   common/protocol_wrapper/websocket_wrapper.cpp
   common/protocol_wrapper/http_handshake_emulator.cpp
+  common/protocol_wrapper/tls_wrapper.cpp
   ${VEIL_SIGNAL_SOURCES}
   ${VEIL_DAEMON_SOURCES}
   common/ipc/ipc_protocol.cpp

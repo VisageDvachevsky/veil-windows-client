@@ -67,6 +67,41 @@ Wraps VEIL packets in WebSocket binary frames, making traffic appear as legitima
 - ✅ Compatible with statistical traffic shaping
 - ⚠️ Does NOT evade TLS-layer inspection (WebSocket typically runs over TLS)
 
+### TLS Record Wrapper (RFC 8446)
+
+**Status:** ✅ Implemented
+
+**Description:**
+Wraps VEIL packets in TLS 1.3 application data records, making traffic appear as legitimate wss:// (WebSocket over TLS) or HTTPS traffic. This is a cosmetic wrapper that adds TLS record headers without performing actual TLS encryption (VEIL already uses ChaCha20-Poly1305 AEAD at a lower layer).
+
+**TLS 1.3 Record Format (RFC 8446 Section 5.1):**
+```
++--------+--------+--------+--------+--------+
+| Type   | Legacy version  | Length           |
+| (0x17) | (0x03) | (0x03) | (MSB)  | (LSB)  |
++--------+--------+--------+--------+--------+
+|                Payload data ...              |
++----------------------------------------------+
+```
+
+**Fields:**
+- **Content Type** (1 byte): `0x17` = application_data
+- **Legacy Version** (2 bytes): `0x0303` = TLS 1.2 (for backward compatibility per RFC 8446)
+- **Length** (2 bytes): Big-endian payload length (max 16384 bytes)
+
+**Overhead:** Fixed 5 bytes per record. For payloads exceeding 16384 bytes, multiple records are used.
+
+**Key Features:**
+- Stateless wrapping — each record is independent
+- Automatic fragmentation for payloads > 16384 bytes
+- `unwrap_all()` reassembles multi-record payloads
+- Validates content type and length during unwrap
+
+**DPI Evasion:**
+- DPI systems see valid TLS application data records
+- Combined with WebSocket wrapper, mimics wss:// traffic
+- Prevents "WebSocket without TLS = block" DPI rule
+
 ## Usage
 
 ### Enabling Protocol Wrappers
@@ -408,10 +443,7 @@ This is a **one-time cost per connection**, not per packet.
 
 ### Potential Additions
 
-1. **TLS Record Wrapper**
-   - Wrap in TLS 1.3 application data records
-   - Highest stealth (appears as normal HTTPS)
-   - Higher overhead (~5-20 bytes per record)
+1. ~~**TLS Record Wrapper**~~ → ✅ Implemented (see above)
 
 2. **QUIC Header Wrapper**
    - Actual QUIC long/short headers
@@ -468,6 +500,7 @@ namespace veil::obfuscation {
 enum class ProtocolWrapperType : std::uint8_t {
   kNone = 0,       // No wrapper (default)
   kWebSocket = 1,  // WebSocket RFC 6455
+  kTLS = 2,        // TLS 1.3 application data records (RFC 8446)
 };
 
 struct ObfuscationProfile {
@@ -528,6 +561,38 @@ class HttpHandshakeEmulator {
 }  // namespace veil::protocol_wrapper
 ```
 
+### TLSWrapper Class
+
+```cpp
+namespace veil::protocol_wrapper {
+
+class TLSWrapper {
+ public:
+  // Wrap data in TLS application data record(s).
+  // Fragments into multiple records if data > 16384 bytes.
+  static std::vector<std::uint8_t> wrap(std::span<const std::uint8_t> data);
+
+  // Unwrap first TLS application data record.
+  // Returns std::nullopt if invalid or incomplete.
+  static std::optional<std::vector<std::uint8_t>> unwrap(
+      std::span<const std::uint8_t> record);
+
+  // Unwrap all concatenated TLS records.
+  // Returns std::nullopt if any record is invalid.
+  static std::optional<std::vector<std::uint8_t>> unwrap_all(
+      std::span<const std::uint8_t> data);
+
+  // Parse TLS record header (5 bytes).
+  static std::optional<std::pair<TLSRecordHeader, std::size_t>> parse_header(
+      std::span<const std::uint8_t> data);
+
+  // Build TLS record header bytes.
+  static std::vector<std::uint8_t> build_header(const TLSRecordHeader& header);
+};
+
+}  // namespace veil::protocol_wrapper
+```
+
 ## Testing
 
 ### Unit Tests
@@ -581,5 +646,6 @@ wireshark veil_websocket.pcap
 ## References
 
 - [RFC 6455: The WebSocket Protocol](https://www.rfc-editor.org/rfc/rfc6455.html)
+- [RFC 8446: The Transport Layer Security (TLS) Protocol Version 1.3](https://www.rfc-editor.org/rfc/rfc8446.html)
 - [WebSocket Security Considerations](https://www.rfc-editor.org/rfc/rfc6455.html#section-10)
 - [DPI Evasion Techniques Survey](https://www.ndss-symposium.org/ndss-paper/how-china-detects-and-blocks-shadowsocks/)
