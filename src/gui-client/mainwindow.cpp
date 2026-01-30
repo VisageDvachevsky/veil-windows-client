@@ -29,6 +29,7 @@
 #include "connection_widget.h"
 #include "diagnostics_widget.h"
 #include "ipc_client_manager.h"
+#include "notification_preferences.h"
 #include "settings_widget.h"
 #include "setup_wizard.h"
 #include "statistics_widget.h"
@@ -134,6 +135,10 @@ MainWindow::MainWindow(QWidget* parent)
   setupSystemTray();
   setupUpdateChecker();
   loadThemePreference();
+
+  // Load notification preferences on startup
+  NotificationPreferences::instance().load();
+
   qDebug() << "MainWindow: GUI components initialized";
 
   // Attempt to connect to daemon
@@ -518,6 +523,20 @@ void MainWindow::setupIpcConnections() {
         qDebug() << "[MainWindow] New state: DISCONNECTED";
         guiState = ConnectionState::kDisconnected;
         updateTrayIcon(TrayConnectionState::kDisconnected);
+
+        // Show connection lost notification if enabled
+        {
+          auto& prefs = NotificationPreferences::instance();
+          if (prefs.shouldShowNotification("connection_lost") && trayIcon_) {
+            trayIcon_->showMessage(
+                "VEIL VPN",
+                "Disconnected from VPN server",
+                QSystemTrayIcon::Warning,
+                3000);
+            prefs.addToHistory("VEIL VPN", "Disconnected from VPN server", "connection_lost");
+          }
+        }
+
         // Record session end in statistics with accumulated byte counts
         statisticsWidget_->onSessionEnded(lastTotalTxBytes_, lastTotalRxBytes_);
         lastTotalTxBytes_ = 0;
@@ -532,6 +551,19 @@ void MainWindow::setupIpcConnections() {
         qDebug() << "[MainWindow] New state: CONNECTED";
         guiState = ConnectionState::kConnected;
         updateTrayIcon(TrayConnectionState::kConnected);
+
+        // Show connection established notification if enabled
+        {
+          auto& prefs = NotificationPreferences::instance();
+          if (prefs.shouldShowNotification("connection_established") && trayIcon_) {
+            trayIcon_->showMessage(
+                "VEIL VPN",
+                "Connected to VPN server",
+                QSystemTrayIcon::Information,
+                3000);
+            prefs.addToHistory("VEIL VPN", "Connected to VPN server", "connection_established");
+          }
+        }
         break;
       case ipc::ConnectionState::kReconnecting:
         qDebug() << "[MainWindow] New state: RECONNECTING";
@@ -1187,11 +1219,20 @@ void MainWindow::closeEvent(QCloseEvent* event) {
   if (minimizeToTray_ && trayIcon_ && trayIcon_->isVisible()) {
     // Minimize to tray instead of closing
     hide();
-    trayIcon_->showMessage(
-        "VEIL VPN",
-        "Application minimized to system tray. Click the icon to restore.",
-        QSystemTrayIcon::Information,
-        2000);
+
+    // Check notification preferences before showing notification
+    auto& prefs = NotificationPreferences::instance();
+    if (prefs.shouldShowNotification("minimized")) {
+      trayIcon_->showMessage(
+          "VEIL VPN",
+          "Application minimized to system tray. Click the icon to restore.",
+          QSystemTrayIcon::Information,
+          2000);
+      prefs.addToHistory("VEIL VPN",
+                        "Application minimized to system tray. Click the icon to restore.",
+                        "minimized");
+    }
+
     event->ignore();
   } else {
     event->accept();
@@ -1247,6 +1288,19 @@ void MainWindow::checkForUpdates() {
 
 void MainWindow::onUpdateAvailable(const UpdateInfo& info) {
   statusBar()->showMessage(tr("Update available: v%1").arg(info.version), 5000);
+
+  // Show tray notification if enabled
+  auto& prefs = NotificationPreferences::instance();
+  if (prefs.shouldShowNotification("update") && trayIcon_ && trayIcon_->isVisible()) {
+    trayIcon_->showMessage(
+        "VEIL VPN Update",
+        QString("New version %1 is available!").arg(info.version),
+        QSystemTrayIcon::Information,
+        5000);
+    prefs.addToHistory("VEIL VPN Update",
+                      QString("New version %1 is available!").arg(info.version),
+                      "update");
+  }
 
   // Show update notification dialog
   auto* dialog = new QDialog(this);
@@ -1639,18 +1693,22 @@ void MainWindow::showError(const ErrorMessage& error, bool showTrayNotification)
 
   // Show system tray notification for critical errors
   if (showTrayNotification && trayIcon_ && trayIcon_->isVisible()) {
-    QString title = QString::fromStdString(error.category_name());
-    QString message = QString::fromStdString(error.title);
-    if (!error.description.empty()) {
-      message += "\n" + QString::fromStdString(error.description);
-    }
+    auto& prefs = NotificationPreferences::instance();
+    if (prefs.shouldShowNotification("error")) {
+      QString title = QString::fromStdString(error.category_name());
+      QString message = QString::fromStdString(error.title);
+      if (!error.description.empty()) {
+        message += "\n" + QString::fromStdString(error.description);
+      }
 
-    QSystemTrayIcon::MessageIcon icon = QSystemTrayIcon::Critical;
-    if (error.category == ErrorCategory::kConfiguration) {
-      icon = QSystemTrayIcon::Warning;
-    }
+      QSystemTrayIcon::MessageIcon icon = QSystemTrayIcon::Critical;
+      if (error.category == ErrorCategory::kConfiguration) {
+        icon = QSystemTrayIcon::Warning;
+      }
 
-    trayIcon_->showMessage(title, message, icon, 5000);
+      trayIcon_->showMessage(title, message, icon, 5000);
+      prefs.addToHistory(title, message, "error");
+    }
   }
 
   // Update status bar with error title
