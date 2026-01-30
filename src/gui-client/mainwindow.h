@@ -19,6 +19,7 @@ namespace veil::gui {
 class ConnectionWidget;
 class SettingsWidget;
 class DiagnosticsWidget;
+class StatisticsWidget;
 class IpcClientManager;
 
 /// Connection state for system tray icon updates
@@ -66,6 +67,7 @@ class MainWindow : public QMainWindow {
   void showConnectionView();
   void showSettingsView();
   void showDiagnosticsView();
+  void showStatisticsView();
   void showAboutDialog();
   void onTrayIconActivated(QSystemTrayIcon::ActivationReason reason);
   void onQuickConnect();
@@ -99,6 +101,7 @@ class MainWindow : public QMainWindow {
   ConnectionWidget* connectionWidget_;
   SettingsWidget* settingsWidget_;
   DiagnosticsWidget* diagnosticsWidget_;
+  StatisticsWidget* statisticsWidget_;
   std::unique_ptr<IpcClientManager> ipcManager_;
 
   // System tray
@@ -111,6 +114,10 @@ class MainWindow : public QMainWindow {
 
   // Update checker
   std::unique_ptr<UpdateChecker> updateChecker_;
+
+  // Accumulated session bytes for statistics tracking
+  uint64_t lastTotalTxBytes_{0};
+  uint64_t lastTotalRxBytes_{0};
 };
 
 }  // namespace veil::gui
