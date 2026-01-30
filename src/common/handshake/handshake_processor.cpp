@@ -528,9 +528,8 @@ MultiClientHandshakeResponder::MultiClientHandshakeResponder(
   }
 }
 
-MultiClientHandshakeResponder::~MultiClientHandshakeResponder() {
-  // Registry is a shared_ptr, it will be cleaned up automatically
-}
+// Registry is a shared_ptr, it will be cleaned up automatically
+MultiClientHandshakeResponder::~MultiClientHandshakeResponder() = default;
 
 std::optional<MultiClientHandshakeResponder::Result> MultiClientHandshakeResponder::handle_init(
     std::span<const std::uint8_t> init_bytes) {

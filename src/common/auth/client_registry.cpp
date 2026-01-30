@@ -14,7 +14,7 @@ bool is_valid_client_id(const std::string& client_id) {
     return false;
   }
   return std::all_of(client_id.begin(), client_id.end(), [](char c) {
-    return std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_';
+    return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '-' || c == '_';
   });
 }
 
