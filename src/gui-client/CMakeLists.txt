@@ -28,6 +28,12 @@ add_executable(veil-client-gui
   update_checker.h
   setup_wizard.cpp
   setup_wizard.h
+  server_config.cpp
+  server_config.h
+  server_list_widget.cpp
+  server_list_widget.h
+  server_selector_widget.cpp
+  server_selector_widget.h
   resources/resources.qrc
 )
 
