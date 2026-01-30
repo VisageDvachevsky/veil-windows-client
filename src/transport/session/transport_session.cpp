@@ -37,7 +37,8 @@ TransportSession::TransportSession(const handshake::HandshakeSession& handshake_
       session_rotator_(config_.session_rotation_interval, config_.session_rotation_packets),
       reorder_buffer_(0, config_.reorder_buffer_size),
       fragment_reassembly_(config_.fragment_buffer_size),
-      retransmit_buffer_(config_.retransmit_config, now_fn_) {
+      retransmit_buffer_(config_.retransmit_config, now_fn_),
+      congestion_controller_(config_.congestion_config, now_fn_) {
   // Enhanced diagnostic logging for session creation (Issue #69, #72)
   // Use INFO level so key fingerprints are always logged, not just in verbose mode
   // This helps diagnose key mismatch issues between client and server
@@ -292,10 +293,20 @@ std::vector<std::vector<std::uint8_t>> TransportSession::get_retransmit_packets(
   // PERFORMANCE (Issue #94): Pre-allocate result vector to avoid reallocations.
   result.reserve(to_retransmit.size());
 
+  // Congestion control (Issue #98): Notify controller of timeout-based retransmits.
+  // This is a timeout loss event, which should trigger multiplicative decrease.
+  bool notified_timeout = false;
+
   for (const auto* pkt : to_retransmit) {
     if (retransmit_buffer_.mark_retransmitted(pkt->sequence)) {
       result.push_back(pkt->data);
       ++stats_.retransmits;
+
+      // Notify congestion controller of timeout loss (once per batch).
+      if (config_.enable_congestion_control && !notified_timeout) {
+        congestion_controller_.on_timeout_loss();
+        notified_timeout = true;
+      }
     } else {
       // Exceeded max retries, drop packet.
       retransmit_buffer_.drop_packet(pkt->sequence);
@@ -313,6 +324,30 @@ void TransportSession::process_ack(const mux::AckFrame& ack) {
   LOG_DEBUG("process_ack called: stream_id={}, ack={}, bitmap={:#010x}, pending_before={}",
             ack.stream_id, ack.ack, ack.bitmap, retransmit_buffer_.pending_count());
 
+  // Track bytes acknowledged for congestion control (Issue #98).
+  const std::size_t bytes_before = retransmit_buffer_.buffered_bytes();
+
+  // Check for duplicate ACK (same ack sequence as before).
+  if (config_.enable_congestion_control && ack.ack == last_ack_seq_ && ack.ack > 0) {
+    ++dup_ack_count_;
+    // Notify congestion controller of duplicate ACK.
+    if (congestion_controller_.on_duplicate_ack()) {
+      // Trigger fast retransmit.
+      LOG_DEBUG("Fast retransmit triggered: dup_ack_count={}, ack_seq={}", dup_ack_count_, ack.ack);
+      congestion_controller_.on_fast_retransmit_loss();
+    }
+  } else {
+    // New ACK - reset duplicate count.
+    dup_ack_count_ = 0;
+    last_ack_seq_ = ack.ack;
+
+    // If we were in fast recovery and got a new ACK, recovery is complete.
+    if (config_.enable_congestion_control &&
+        congestion_controller_.state() == mux::CongestionState::kFastRecovery) {
+      congestion_controller_.on_recovery_complete();
+    }
+  }
+
   // Cumulative ACK.
   retransmit_buffer_.acknowledge_cumulative(ack.ack);
 
@@ -323,6 +358,18 @@ void TransportSession::process_ack(const mux::AckFrame& ack) {
       if (seq > 0) {
         retransmit_buffer_.acknowledge(seq);
       }
+    }
+  }
+
+  // Update congestion controller with acknowledged bytes (Issue #98).
+  if (config_.enable_congestion_control) {
+    const std::size_t bytes_after = retransmit_buffer_.buffered_bytes();
+    if (bytes_before > bytes_after) {
+      const std::size_t acked_bytes = bytes_before - bytes_after;
+      congestion_controller_.on_ack(acked_bytes);
+
+      // Update pacing rate based on current RTT.
+      congestion_controller_.set_srtt(retransmit_buffer_.estimated_rtt());
     }
   }
 
@@ -509,7 +556,37 @@ std::vector<mux::MuxFrame> TransportSession::fragment_data(std::span<const std::
   return frames;
 }
 
-// PERFORMANCE (Issue #97): Zero-copy packet processing implementations.
+// ========== Congestion Control API (Issue #98) ==========
+
+bool TransportSession::can_send(std::size_t bytes_in_flight) const {
+  if (!config_.enable_congestion_control) {
+    return true;  // No congestion control, always allow.
+  }
+  return congestion_controller_.can_send(bytes_in_flight);
+}
+
+std::size_t TransportSession::sendable_bytes(std::size_t bytes_in_flight) const {
+  if (!config_.enable_congestion_control) {
+    return std::numeric_limits<std::size_t>::max();
+  }
+  return congestion_controller_.sendable_bytes(bytes_in_flight);
+}
+
+bool TransportSession::check_pacing() {
+  if (!config_.enable_congestion_control) {
+    return true;  // No congestion control, always allow.
+  }
+  return congestion_controller_.check_pacing();
+}
+
+std::optional<std::chrono::microseconds> TransportSession::time_until_next_send() const {
+  if (!config_.enable_congestion_control) {
+    return std::nullopt;  // No congestion control, no pacing delay.
+  }
+  return congestion_controller_.time_until_next_send();
+}
+
+// ========== Zero-Copy Packet Processing API (Issue #97) ==========
 
 std::optional<std::pair<mux::MuxFrameView, std::size_t>> TransportSession::decrypt_packet_zero_copy(
     std::span<const std::uint8_t> ciphertext,
