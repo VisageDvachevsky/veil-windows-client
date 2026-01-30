@@ -1,0 +1,83 @@
+name: Build Installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version for the installer (e.g., 1.0.0)'
+        required: false
+        default: '1.0.0'
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version for the installer'
+        required: false
+        default: '1.0.0'
+        type: string
+
+jobs:
+  build-installer:
+    name: Build NSIS Installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: veil-vpn-windows-x64
+          path: installer/
+        continue-on-error: true
+
+      - name: Install NSIS
+        uses: repolevedavaj/install-nsis@v1.1.0
+        with:
+          nsis-version: '3.10'
+
+      - name: Prepare installer directory
+        run: |
+          cd installer
+
+          # Create required subdirectories if they don't exist
+          New-Item -ItemType Directory -Force -Path docs
+          New-Item -ItemType Directory -Force -Path bin
+          New-Item -ItemType Directory -Force -Path driver
+
+          # Copy documentation
+          Copy-Item ../README.md docs/ -ErrorAction SilentlyContinue
+
+      - name: Update version in NSIS script
+        if: inputs.version != ''
+        run: |
+          $version = "${{ inputs.version }}"
+          $nsiPath = "installer/veil-vpn.nsi"
+          $nsiContent = Get-Content $nsiPath -Raw
+
+          $versionParts = $version.Split('.')
+          $major = if ($versionParts.Length -gt 0) { $versionParts[0] } else { "1" }
+          $minor = if ($versionParts.Length -gt 1) { $versionParts[1] } else { "0" }
+          $patch = if ($versionParts.Length -gt 2) { $versionParts[2].Split('-')[0] } else { "0" }
+
+          $nsiContent = $nsiContent -replace '!define PRODUCT_VERSION ".*"', "!define PRODUCT_VERSION `"$version`""
+          $nsiContent = $nsiContent -replace '!define PRODUCT_VERSION_MAJOR \d+', "!define PRODUCT_VERSION_MAJOR $major"
+          $nsiContent = $nsiContent -replace '!define PRODUCT_VERSION_MINOR \d+', "!define PRODUCT_VERSION_MINOR $minor"
+          $nsiContent = $nsiContent -replace '!define PRODUCT_VERSION_PATCH \d+', "!define PRODUCT_VERSION_PATCH $patch"
+          Set-Content $nsiPath $nsiContent -NoNewline
+
+          Write-Host "Updated installer version to $version"
+
+      - name: Build installer
+        run: |
+          cd installer
+          makensis veil-vpn.nsi
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: veil-vpn-installer
+          path: installer/veil-vpn-*-setup.exe
+          retention-days: 14
+          if-no-files-found: error
