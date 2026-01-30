@@ -9,6 +9,7 @@ if(WIN32)
     mux_codec_tests.cpp
     retransmit_buffer_tests.cpp
     ack_scheduler_tests.cpp
+    congestion_controller_tests.cpp
     transport_session_tests.cpp
     session_migration_tests.cpp
     console_handler_tests.cpp
@@ -23,6 +24,7 @@ else()
     mux_codec_tests.cpp
     retransmit_buffer_tests.cpp
     ack_scheduler_tests.cpp
+    congestion_controller_tests.cpp
     transport_session_tests.cpp
     signal_handler_tests.cpp
     daemon_tests.cpp
