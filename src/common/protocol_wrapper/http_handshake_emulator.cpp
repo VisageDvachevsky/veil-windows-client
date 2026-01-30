@@ -150,10 +150,10 @@ bool iequals(std::string_view a, std::string_view b) {
 
 // Trim leading and trailing whitespace.
 std::string_view trim(std::string_view sv) {
-  while (!sv.empty() && std::isspace(static_cast<unsigned char>(sv.front()))) {
+  while (!sv.empty() && std::isspace(static_cast<unsigned char>(sv.front())) != 0) {
     sv.remove_prefix(1);
   }
-  while (!sv.empty() && std::isspace(static_cast<unsigned char>(sv.back()))) {
+  while (!sv.empty() && std::isspace(static_cast<unsigned char>(sv.back())) != 0) {
     sv.remove_suffix(1);
   }
   return sv;
@@ -211,7 +211,7 @@ std::vector<std::uint8_t> HttpHandshakeEmulator::base64_decode(std::string_view 
   std::string clean;
   clean.reserve(base64.size());
   for (char c : base64) {
-    if (!std::isspace(static_cast<unsigned char>(c))) {
+    if (std::isspace(static_cast<unsigned char>(c)) == 0) {
       clean.push_back(c);
     }
   }
