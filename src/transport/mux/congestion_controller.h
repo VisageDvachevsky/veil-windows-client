@@ -17,16 +17,16 @@ enum class CongestionState : std::uint8_t {
 // Configuration for congestion control behavior.
 struct CongestionConfig {
   // Initial congestion window in bytes.
-  std::size_t initial_cwnd{10 * 1400};  // 10 MSS (RFC 6928)
+  std::size_t initial_cwnd{static_cast<std::size_t>(10) * 1400};  // 10 MSS (RFC 6928)
 
   // Minimum congestion window in bytes (1 MSS).
   std::size_t min_cwnd{1400};
 
   // Maximum congestion window in bytes.
-  std::size_t max_cwnd{64 * 1024 * 1024};  // 64 MB
+  std::size_t max_cwnd{static_cast<std::size_t>(64) * 1024 * 1024};  // 64 MB
 
   // Initial slow start threshold (large value = always start in slow start).
-  std::size_t initial_ssthresh{64 * 1024 * 1024};
+  std::size_t initial_ssthresh{static_cast<std::size_t>(64) * 1024 * 1024};
 
   // Maximum Segment Size (MSS) - typical MTU minus IP/UDP headers.
   std::size_t mss{1400};
