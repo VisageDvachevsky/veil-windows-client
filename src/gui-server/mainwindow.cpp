@@ -25,8 +25,8 @@ MainWindow::~MainWindow() = default;
 
 void MainWindow::setupUi() {
   setWindowTitle("VEIL VPN Server");
-  setMinimumSize(800, 600);
-  resize(1024, 768);
+  setMinimumSize(scaleDpi(800), scaleDpi(600));
+  resize(scaleDpi(1024), scaleDpi(768));
 
   // Set window flags for modern appearance
   setWindowFlags(windowFlags() | Qt::WindowMinMaxButtonsHint);
@@ -40,7 +40,7 @@ void MainWindow::setupUi() {
   auto* headerLayout = new QHBoxLayout();
   auto* titleLabel = new QLabel("VEIL Server", centralWidget);
   titleLabel->setStyleSheet(QString("font-size: %1px; font-weight: 700; color: %2;")
-                                .arg(fonts::kFontSizeHeadline)
+                                .arg(fonts::kFontSizeHeadline())
                                 .arg(colors::dark::kAccentPrimary));
   headerLayout->addWidget(titleLabel);
   headerLayout->addStretch();
@@ -145,7 +145,7 @@ void MainWindow::showAboutDialog() {
   auto* dialog = new QDialog(this);
   dialog->setWindowTitle(tr("About VEIL Server"));
   dialog->setModal(true);
-  dialog->setFixedSize(400, 300);
+  dialog->setFixedSize(scaleDpi(400), scaleDpi(300));
 
   dialog->setStyleSheet(R"(
     QDialog {

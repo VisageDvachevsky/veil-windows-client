@@ -2,6 +2,9 @@
 
 #include <QString>
 #include <QColor>
+#include <QApplication>
+#include <QScreen>
+#include <cmath>
 
 #ifdef _WIN32
 #include <QSettings>
@@ -15,6 +18,20 @@ enum class Theme {
   kLight,   // Light theme
   kSystem   // Follow system theme (Windows dark mode setting)
 };
+
+/// DPI scaling helper - returns scaling factor based on screen DPI
+inline qreal getDpiScaleFactor() {
+  if (qApp && qApp->primaryScreen()) {
+    // Standard DPI is 96 on Windows and most systems
+    return qApp->primaryScreen()->logicalDotsPerInch() / 96.0;
+  }
+  return 1.0;
+}
+
+/// Scale a value based on DPI
+inline int scaleDpi(int baseValue) {
+  return static_cast<int>(std::lround(baseValue * getDpiScaleFactor()));
+}
 
 /// Color palette as defined in client_ui_design.md
 namespace colors {
@@ -74,14 +91,25 @@ namespace fonts {
 constexpr const char* kFontFamily = "'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
 constexpr const char* kFontFamilyMono = "'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', monospace";
 
-constexpr int kFontSizeHero = 42;
-constexpr int kFontSizeHeadline = 28;
-constexpr int kFontSizeTitle = 20;
-constexpr int kFontSizeLarge = 17;
-constexpr int kFontSizeBody = 15;
-constexpr int kFontSizeCaption = 13;
-constexpr int kFontSizeSmall = 11;
-constexpr int kFontSizeMono = 13;
+// Base font sizes (at 96 DPI)
+constexpr int kFontSizeHeroBase = 42;
+constexpr int kFontSizeHeadlineBase = 28;
+constexpr int kFontSizeTitleBase = 20;
+constexpr int kFontSizeLargeBase = 17;
+constexpr int kFontSizeBodyBase = 15;
+constexpr int kFontSizeCaptionBase = 13;
+constexpr int kFontSizeSmallBase = 11;
+constexpr int kFontSizeMonoBase = 13;
+
+// DPI-aware font size functions
+inline int kFontSizeHero() { return scaleDpi(kFontSizeHeroBase); }
+inline int kFontSizeHeadline() { return scaleDpi(kFontSizeHeadlineBase); }
+inline int kFontSizeTitle() { return scaleDpi(kFontSizeTitleBase); }
+inline int kFontSizeLarge() { return scaleDpi(kFontSizeLargeBase); }
+inline int kFontSizeBody() { return scaleDpi(kFontSizeBodyBase); }
+inline int kFontSizeCaption() { return scaleDpi(kFontSizeCaptionBase); }
+inline int kFontSizeSmall() { return scaleDpi(kFontSizeSmallBase); }
+inline int kFontSizeMono() { return scaleDpi(kFontSizeMonoBase); }
 }  // namespace fonts
 
 /// Animation durations in milliseconds
@@ -96,25 +124,44 @@ constexpr int kDurationGlow = 3000;
 
 /// Spacing and sizing
 namespace spacing {
-constexpr int kPaddingTiny = 4;
-constexpr int kPaddingSmall = 8;
-constexpr int kPaddingMedium = 16;
-constexpr int kPaddingLarge = 24;
-constexpr int kPaddingXLarge = 32;
-constexpr int kPaddingXXLarge = 48;
+// Base spacing values (at 96 DPI)
+constexpr int kPaddingTinyBase = 4;
+constexpr int kPaddingSmallBase = 8;
+constexpr int kPaddingMediumBase = 16;
+constexpr int kPaddingLargeBase = 24;
+constexpr int kPaddingXLargeBase = 32;
+constexpr int kPaddingXXLargeBase = 48;
 
-constexpr int kBorderRadiusSmall = 8;
-constexpr int kBorderRadiusMedium = 12;
-constexpr int kBorderRadiusLarge = 16;
-constexpr int kBorderRadiusXLarge = 24;
+constexpr int kBorderRadiusSmallBase = 8;
+constexpr int kBorderRadiusMediumBase = 12;
+constexpr int kBorderRadiusLargeBase = 16;
+constexpr int kBorderRadiusXLargeBase = 24;
 constexpr int kBorderRadiusRound = 9999;
 
-// Component sizes
-constexpr int kButtonHeight = 56;
-constexpr int kButtonHeightSmall = 40;
-constexpr int kIconSize = 24;
-constexpr int kIconSizeLarge = 32;
-constexpr int kStatusIndicatorSize = 120;
+constexpr int kButtonHeightBase = 56;
+constexpr int kButtonHeightSmallBase = 40;
+constexpr int kIconSizeBase = 24;
+constexpr int kIconSizeLargeBase = 32;
+constexpr int kStatusIndicatorSizeBase = 120;
+
+// DPI-aware spacing functions
+inline int kPaddingTiny() { return scaleDpi(kPaddingTinyBase); }
+inline int kPaddingSmall() { return scaleDpi(kPaddingSmallBase); }
+inline int kPaddingMedium() { return scaleDpi(kPaddingMediumBase); }
+inline int kPaddingLarge() { return scaleDpi(kPaddingLargeBase); }
+inline int kPaddingXLarge() { return scaleDpi(kPaddingXLargeBase); }
+inline int kPaddingXXLarge() { return scaleDpi(kPaddingXXLargeBase); }
+
+inline int kBorderRadiusSmall() { return scaleDpi(kBorderRadiusSmallBase); }
+inline int kBorderRadiusMedium() { return scaleDpi(kBorderRadiusMediumBase); }
+inline int kBorderRadiusLarge() { return scaleDpi(kBorderRadiusLargeBase); }
+inline int kBorderRadiusXLarge() { return scaleDpi(kBorderRadiusXLargeBase); }
+
+inline int kButtonHeight() { return scaleDpi(kButtonHeightBase); }
+inline int kButtonHeightSmall() { return scaleDpi(kButtonHeightSmallBase); }
+inline int kIconSize() { return scaleDpi(kIconSizeBase); }
+inline int kIconSizeLarge() { return scaleDpi(kIconSizeLargeBase); }
+inline int kStatusIndicatorSize() { return scaleDpi(kStatusIndicatorSizeBase); }
 }  // namespace spacing
 
 /// Returns the complete dark theme stylesheet
