@@ -4,7 +4,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
-#include <map>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -106,28 +106,45 @@ bool RetransmitBuffer::acknowledge(std::uint64_t sequence) {
 }
 
 void RetransmitBuffer::acknowledge_cumulative(std::uint64_t sequence) {
+  // Issue #96: With unordered_map, we need to iterate all entries and check sequence.
+  // This is still efficient because cumulative ACKs typically acknowledge many packets
+  // at once, and the O(1) insert/find/erase on the hot path (per-packet) is more important
+  // than O(n) iteration here.
+
   // Debug logging for cumulative ACK (Issue #72)
   // Changed to DEBUG level to avoid performance impact in hot path (Issue #92)
-  [[maybe_unused]] std::uint64_t min_pending = pending_.empty() ? 0 : pending_.begin()->first;
-  [[maybe_unused]] std::uint64_t max_pending = pending_.empty() ? 0 : pending_.rbegin()->first;
+  [[maybe_unused]] std::uint64_t min_pending = 0;
+  [[maybe_unused]] std::uint64_t max_pending = 0;
+  if (!pending_.empty()) {
+    min_pending = pending_.begin()->first;
+    max_pending = pending_.begin()->first;
+    for (const auto& [seq, pkt] : pending_) {
+      if (seq < min_pending) min_pending = seq;
+      if (seq > max_pending) max_pending = seq;
+    }
+  }
   LOG_DEBUG("acknowledge_cumulative: ack_seq={}, pending_count={}, pending_range=[{}, {}]",
             sequence, pending_.size(), min_pending, max_pending);
 
   [[maybe_unused]] std::size_t acked_count = 0;
-  auto it = pending_.begin();
-  while (it != pending_.end() && it->first <= sequence) {
-    const auto& pkt = it->second;
-    LOG_DEBUG("  Acknowledging packet seq={}", it->first);
-    if (pkt.retry_count == 0) {
-      const auto now = now_fn_();
-      const auto rtt_sample =
-          std::chrono::duration_cast<std::chrono::milliseconds>(now - pkt.first_sent);
-      update_rtt(rtt_sample);
+  // Iterate and erase entries with sequence <= ack sequence.
+  for (auto it = pending_.begin(); it != pending_.end();) {
+    if (it->first <= sequence) {
+      const auto& pkt = it->second;
+      LOG_DEBUG("  Acknowledging packet seq={}", it->first);
+      if (pkt.retry_count == 0) {
+        const auto now = now_fn_();
+        const auto rtt_sample =
+            std::chrono::duration_cast<std::chrono::milliseconds>(now - pkt.first_sent);
+        update_rtt(rtt_sample);
+      }
+      buffered_bytes_ -= pkt.data.size();
+      ++stats_.packets_acked;
+      ++acked_count;
+      it = pending_.erase(it);
+    } else {
+      ++it;
     }
-    buffered_bytes_ -= pkt.data.size();
-    ++stats_.packets_acked;
-    ++acked_count;
-    it = pending_.erase(it);
   }
   LOG_DEBUG("acknowledge_cumulative done: acked={} packets", acked_count);
 }
@@ -226,13 +243,20 @@ bool RetransmitBuffer::make_room(std::size_t bytes_needed) {
       return false;
 
     case DropPolicy::kOldest: {
+      // Issue #96: With unordered_map, we need to find the oldest packet manually.
       // Drop oldest packets (lowest sequence numbers) until we have room.
       while (!pending_.empty() && buffered_bytes_ + bytes_needed > config_.max_buffer_bytes) {
-        auto it = pending_.begin();
-        buffered_bytes_ -= it->second.data.size();
+        // Find the entry with the lowest sequence number.
+        auto oldest_it = pending_.begin();
+        for (auto it = pending_.begin(); it != pending_.end(); ++it) {
+          if (it->first < oldest_it->first) {
+            oldest_it = it;
+          }
+        }
+        buffered_bytes_ -= oldest_it->second.data.size();
         ++stats_.packets_dropped_buffer_full;
         ++stats_.packets_dropped;
-        pending_.erase(it);
+        pending_.erase(oldest_it);
       }
       return buffered_bytes_ + bytes_needed <= config_.max_buffer_bytes;
     }
