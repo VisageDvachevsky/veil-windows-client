@@ -586,4 +586,153 @@ std::optional<std::chrono::microseconds> TransportSession::time_until_next_send(
   return congestion_controller_.time_until_next_send();
 }
 
+// ========== Zero-Copy Packet Processing API (Issue #97) ==========
+
+std::optional<std::pair<mux::MuxFrameView, std::size_t>> TransportSession::decrypt_packet_zero_copy(
+    std::span<const std::uint8_t> ciphertext,
+    std::span<std::uint8_t> decrypt_buffer) {
+  VEIL_DCHECK_THREAD(thread_checker_);
+
+  // Minimum packet size: sequence (8 bytes) + tag (16 bytes) + header (1 byte minimum)
+  constexpr std::size_t kMinPacketSize = 8 + 16 + 1;
+  if (ciphertext.size() < kMinPacketSize) {
+    LOG_DEBUG("Zero-copy: Packet too small: {} bytes", ciphertext.size());
+    ++stats_.packets_dropped_decrypt;
+    return std::nullopt;
+  }
+
+  // Extract obfuscated sequence from first 8 bytes.
+  std::uint64_t obfuscated_sequence = 0;
+  for (int i = 0; i < 8; ++i) {
+    obfuscated_sequence = (obfuscated_sequence << 8) | ciphertext[static_cast<std::size_t>(i)];
+  }
+
+  // Deobfuscate sequence number.
+  const std::uint64_t sequence = crypto::deobfuscate_sequence(obfuscated_sequence, recv_seq_obfuscation_key_);
+
+  LOG_DEBUG("Zero-copy decrypt: session_id={}, pkt_size={}, seq={}", current_session_id_, ciphertext.size(), sequence);
+
+  // Replay check.
+  if (!replay_window_.mark_and_check(sequence)) {
+    LOG_DEBUG("Zero-copy: Packet replay detected: sequence={}", sequence);
+    ++stats_.packets_dropped_replay;
+    return std::nullopt;
+  }
+
+  // Derive nonce from sequence.
+  const auto nonce = crypto::derive_nonce(keys_.recv_nonce, sequence);
+
+  // Get ciphertext body (skip 8-byte sequence prefix).
+  auto ciphertext_body = ciphertext.subspan(8);
+
+  // Check output buffer has enough space for plaintext.
+  const std::size_t max_plaintext_size = crypto::aead_plaintext_size(ciphertext_body.size());
+  if (decrypt_buffer.size() < max_plaintext_size) {
+    LOG_DEBUG("Zero-copy: Decrypt buffer too small: {} < {}", decrypt_buffer.size(), max_plaintext_size);
+    replay_window_.unmark(sequence);
+    ++stats_.packets_dropped_decrypt;
+    return std::nullopt;
+  }
+
+  // PERFORMANCE (Issue #97): Use zero-copy decryption into provided buffer.
+  const std::size_t plaintext_size = crypto::aead_decrypt_to(
+      keys_.recv_key, nonce, {}, ciphertext_body, decrypt_buffer);
+
+  if (plaintext_size == 0) {
+    LOG_DEBUG("Zero-copy: Decryption failed: sequence={}", sequence);
+    replay_window_.unmark(sequence);
+    ++stats_.packets_dropped_decrypt;
+    return std::nullopt;
+  }
+
+  LOG_DEBUG("Zero-copy decryption SUCCESS: session_id={}, sequence={}, plaintext_size={}",
+            current_session_id_, sequence, plaintext_size);
+
+  ++stats_.packets_received;
+  stats_.bytes_received += ciphertext.size();
+
+  // PERFORMANCE (Issue #97): Use zero-copy frame decoding.
+  // The frame view borrows data from decrypt_buffer, so caller must keep buffer alive.
+  auto frame_view = mux::MuxCodec::decode_view(decrypt_buffer.subspan(0, plaintext_size));
+  if (!frame_view) {
+    LOG_WARN("Zero-copy: Frame decode FAILED: plaintext_size={}", plaintext_size);
+    return std::nullopt;
+  }
+
+  if (frame_view->kind == mux::FrameKind::kData) {
+    ++stats_.fragments_received;
+    recv_ack_bitmap_.ack(sequence);
+  }
+
+  if (sequence > recv_sequence_max_) {
+    recv_sequence_max_ = sequence;
+  }
+
+  return std::make_pair(*frame_view, plaintext_size);
+}
+
+std::size_t TransportSession::encrypt_frame_zero_copy(const mux::MuxFrame& frame,
+                                                        std::span<std::uint8_t> output_buffer) {
+  VEIL_DCHECK_THREAD(thread_checker_);
+
+  // Check for sequence number overflow.
+  if (send_sequence_ >= kNonceOverflowWarningThreshold) {
+    LOG_ERROR("SECURITY WARNING: send_sequence_ approaching overflow (current={})", send_sequence_);
+  }
+
+  // Calculate required sizes.
+  const std::size_t plaintext_size = mux::MuxCodec::encoded_size(frame);
+  const std::size_t ciphertext_size = crypto::aead_ciphertext_size(plaintext_size);
+  const std::size_t total_size = 8 + ciphertext_size;  // 8 bytes for sequence prefix
+
+  if (output_buffer.size() < total_size) {
+    LOG_DEBUG("Zero-copy encrypt: Output buffer too small: {} < {}", output_buffer.size(), total_size);
+    return 0;
+  }
+
+  // PERFORMANCE (Issue #97): Reuse scratch buffer for frame encoding.
+  if (encode_scratch_buffer_.capacity() < plaintext_size) {
+    encode_scratch_buffer_.reserve(std::max(plaintext_size, static_cast<std::size_t>(2048)));
+  }
+  encode_scratch_buffer_.resize(plaintext_size);
+
+  // Encode frame into scratch buffer.
+  const std::size_t encoded_size = mux::MuxCodec::encode_to(frame, encode_scratch_buffer_);
+  if (encoded_size == 0) {
+    LOG_DEBUG("Zero-copy encrypt: Frame encoding failed");
+    return 0;
+  }
+
+  // Derive nonce from current send sequence.
+  const auto nonce = crypto::derive_nonce(keys_.send_nonce, send_sequence_);
+
+  // Obfuscate sequence for DPI resistance.
+  const std::uint64_t obfuscated_sequence = crypto::obfuscate_sequence(send_sequence_, send_seq_obfuscation_key_);
+
+  // Write obfuscated sequence prefix (8 bytes big-endian).
+  for (int i = 7; i >= 0; --i) {
+    output_buffer[static_cast<std::size_t>(7 - i)] =
+        static_cast<std::uint8_t>((obfuscated_sequence >> (8 * i)) & 0xFF);
+  }
+
+  // PERFORMANCE (Issue #97): Use zero-copy encryption into output buffer.
+  const std::size_t encrypted_size = crypto::aead_encrypt_to(
+      keys_.send_key, nonce, {},
+      std::span<const std::uint8_t>(encode_scratch_buffer_.data(), encoded_size),
+      output_buffer.subspan(8));
+
+  if (encrypted_size == 0) {
+    LOG_DEBUG("Zero-copy encrypt: Encryption failed");
+    return 0;
+  }
+
+  LOG_DEBUG("Zero-copy encrypt: session_id={}, sequence={}, plaintext_size={}, total_size={}",
+            current_session_id_, send_sequence_, plaintext_size, 8 + encrypted_size);
+
+  // Increment sequence after successful encryption.
+  ++send_sequence_;
+
+  return 8 + encrypted_size;
+}
+
 }  // namespace veil::transport

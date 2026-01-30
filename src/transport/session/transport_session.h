@@ -12,6 +12,7 @@
 #include "common/handshake/handshake_processor.h"
 #include "common/session/replay_window.h"
 #include "common/session/session_rotator.h"
+#include "common/utils/packet_pool.h"
 #include "common/utils/thread_checker.h"
 #include "transport/mux/ack_bitmap.h"
 #include "transport/mux/congestion_controller.h"
@@ -177,6 +178,27 @@ class TransportSession {
   // Get time until pacing allows next send.
   std::optional<std::chrono::microseconds> time_until_next_send() const;
 
+  // ========== Zero-Copy Packet Processing API ==========
+  // PERFORMANCE (Issue #97): Zero-copy packet processing methods.
+  // These methods use pre-allocated buffers from the packet pool to avoid allocations.
+
+  // Decrypt packet into a pre-allocated buffer and return frame view.
+  // The caller provides the decryption buffer which must outlive the returned frame view.
+  // Returns the frame view and the size of plaintext written to decrypt_buffer.
+  // Returns nullopt if decryption fails.
+  std::optional<std::pair<mux::MuxFrameView, std::size_t>> decrypt_packet_zero_copy(
+      std::span<const std::uint8_t> ciphertext,
+      std::span<std::uint8_t> decrypt_buffer);
+
+  // Encrypt frame into a pre-allocated buffer using zero-copy operations.
+  // Returns the number of bytes written, or 0 on failure.
+  std::size_t encrypt_frame_zero_copy(const mux::MuxFrame& frame,
+                                       std::span<std::uint8_t> output_buffer);
+
+  // Get the internal packet pool for buffer management.
+  // Useful for callers who want to acquire/release buffers for zero-copy operations.
+  utils::PacketPool& packet_pool() { return packet_pool_; }
+
  private:
   // Build an encrypted packet from mux frame.
   std::vector<std::uint8_t> build_encrypted_packet(const mux::MuxFrame& frame);
@@ -230,6 +252,15 @@ class TransportSession {
 
   // Statistics.
   TransportStats stats_;
+
+  // PERFORMANCE (Issue #97): Buffer pool for zero-copy packet processing.
+  // Pre-allocates buffers to avoid heap allocations in the hot path.
+  // Uses 16 buffers with 2KB capacity each (enough for MTU + headers + crypto overhead).
+  utils::PacketPool packet_pool_{16, 2048};
+
+  // PERFORMANCE (Issue #97): Scratch buffer for frame encoding.
+  // This avoids allocation in build_encrypted_packet_zero_copy.
+  std::vector<std::uint8_t> encode_scratch_buffer_;
 
   // Thread safety: verifies single-threaded access in debug builds.
   VEIL_THREAD_CHECKER(thread_checker_);
