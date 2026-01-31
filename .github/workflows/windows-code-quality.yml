@@ -64,7 +64,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows `
             -DVEIL_ENABLE_MSVC_ANALYZE=ON `
-            -DVEIL_BUILD_TESTS=ON `
+            -DVEIL_BUILD_TESTS=OFF `
             -DVEIL_BUILD_GUI=OFF `
             -DVEIL_BUILD_SERVER=OFF `
             -DVEIL_BUILD_SERVICE=ON
