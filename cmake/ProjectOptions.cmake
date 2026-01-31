@@ -7,6 +7,14 @@ option(VEIL_USE_SYSTEM_SODIUM "Prefer system-provided libsodium" OFF)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# Ensure consistent /permissive- across ALL targets on MSVC (including
+# FetchContent dependencies like GTest).  Without this, std::string name
+# mangling in GTest differs from project code compiled with /permissive-,
+# causing LNK2001 unresolved-external errors when linking tests.
+if(MSVC)
+  add_compile_options(/permissive-)
+endif()
+
 if(VEIL_ENABLE_LTO)
   include(CheckIPOSupported)
   check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error)

@@ -147,13 +147,4 @@ if(VEIL_BUILD_TESTS)
   )
 
   FetchContent_MakeAvailable(googletest)
-
-  # Ensure GTest targets compile with compatible flags on MSVC
-  if(MSVC)
-    foreach(_gtest_target gtest gtest_main)
-      if(TARGET ${_gtest_target})
-        target_compile_options(${_gtest_target} PRIVATE /permissive-)
-      endif()
-    endforeach()
-  endif()
 endif()
