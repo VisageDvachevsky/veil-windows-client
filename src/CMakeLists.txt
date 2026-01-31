@@ -8,6 +8,7 @@ if(WIN32)
     windows/system_tray.cpp
     windows/console_handler.cpp
     windows/app_enumerator.cpp
+    windows/shortcut_manager.cpp
   )
   # Windows doesn't use POSIX signals or daemonization
   set(VEIL_SIGNAL_SOURCES)
@@ -126,6 +127,8 @@ if(WIN32)
       iphlpapi
       ws2_32
       rpcrt4
+      ole32
+      shell32
   )
   target_compile_definitions(veil_common PUBLIC WIN32_LEAN_AND_MEAN NOMINMAX)
 

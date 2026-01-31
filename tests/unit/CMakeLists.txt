@@ -15,6 +15,7 @@ if(WIN32)
     console_handler_tests.cpp
     service_manager_tests.cpp
     app_enumerator_tests.cpp
+    shortcut_manager_tests.cpp
   )
 else()
   set(VEIL_PLATFORM_TEST_SOURCES
