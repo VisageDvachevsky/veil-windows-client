@@ -116,7 +116,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows `
-            -DVEIL_BUILD_TESTS=OFF `
+            -DVEIL_BUILD_TESTS=ON `
             -DVEIL_BUILD_GUI=ON `
             -DVEIL_BUILD_SERVER=OFF `
             -DVEIL_VERSION_MAJOR=$major `
@@ -125,6 +125,13 @@ jobs:
 
       - name: Build
         run: cmake --build build --config Release
+
+      - name: Run tests
+        run: |
+          cd build
+          ctest --build-config Release --output-on-failure --timeout 120
+        env:
+          VEIL_SKIP_NETEM: 1
 
       - name: Prepare artifacts
         run: |
@@ -266,7 +273,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++ \
-            -DVEIL_BUILD_TESTS=OFF \
+            -DVEIL_BUILD_TESTS=ON \
             -DVEIL_BUILD_GUI=ON \
             -DVEIL_BUILD_SERVER=ON \
             -DVEIL_VERSION_MAJOR=${MAJOR:-1} \
@@ -275,6 +282,13 @@ jobs:
 
       - name: Build
         run: cmake --build build --config Release
+
+      - name: Run tests
+        run: |
+          cd build
+          ctest --build-config Release --output-on-failure --timeout 120
+        env:
+          VEIL_SKIP_NETEM: 1
 
       - name: Prepare artifacts
         run: |
