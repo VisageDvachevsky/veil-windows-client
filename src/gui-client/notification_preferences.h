@@ -28,6 +28,9 @@ struct NotificationEvent {
 /// Manages notification preferences and history
 class NotificationPreferences {
  public:
+  NotificationPreferences(const NotificationPreferences&) = delete;
+  NotificationPreferences& operator=(const NotificationPreferences&) = delete;
+
   /// Get the singleton instance
   static NotificationPreferences& instance();
 
@@ -73,9 +76,6 @@ class NotificationPreferences {
 
   /// Check if a specific notification type should be shown
   bool shouldShowNotification(const QString& eventType) const;
-
-  NotificationPreferences(const NotificationPreferences&) = delete;
-  NotificationPreferences& operator=(const NotificationPreferences&) = delete;
 
  private:
   NotificationPreferences() = default;
