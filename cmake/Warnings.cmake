@@ -1,6 +1,11 @@
 function(veil_set_warnings target)
   if(MSVC)
     target_compile_options(${target} PRIVATE /W4 /permissive- /w14242 /w14254 /w14263 /w14265 /w14287 /we4289 /w14296 /w14311 /w14826 /w14905 /w14906 /w14928)
+
+    # Add MSVC /analyze static analysis if enabled
+    if(VEIL_ENABLE_MSVC_ANALYZE)
+      target_compile_options(${target} PRIVATE /analyze)
+    endif()
   else()
     target_compile_options(${target} PRIVATE
       -Wall

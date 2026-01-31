@@ -591,7 +591,7 @@ void MainWindow::setupIpcConnections() {
         // Show connection lost notification if enabled
         {
           auto& prefs = NotificationPreferences::instance();
-          if (prefs.shouldShowNotification("connection_lost") && trayIcon_) {
+          if (prefs.shouldShowNotification("connection_lost") && trayIcon_ != nullptr) {
             trayIcon_->showMessage(
                 "VEIL VPN",
                 "Disconnected from VPN server",
@@ -621,7 +621,7 @@ void MainWindow::setupIpcConnections() {
         // Show connection established notification if enabled
         {
           auto& prefs = NotificationPreferences::instance();
-          if (prefs.shouldShowNotification("connection_established") && trayIcon_) {
+          if (prefs.shouldShowNotification("connection_established") && trayIcon_ != nullptr) {
             trayIcon_->showMessage(
                 "VEIL VPN",
                 "Connected to VPN server",
@@ -772,7 +772,7 @@ void MainWindow::setupIpcConnections() {
           this, [this](uint64_t currentUsage, uint64_t threshold) {
     Q_UNUSED(threshold);
     auto& prefs = NotificationPreferences::instance();
-    if (prefs.shouldShowNotification("usage_warning") && trayIcon_) {
+    if (prefs.shouldShowNotification("usage_warning") && trayIcon_ != nullptr) {
       QString msg = QString("Monthly data usage has reached %1")
                         .arg(currentUsage >= 1073741824ULL
                                  ? QString("%1 GB").arg(static_cast<double>(currentUsage) / 1073741824.0, 0, 'f', 1)
@@ -925,7 +925,7 @@ void MainWindow::setupMenuBar() {
   auto* saveSettingsShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_S), this);
   connect(saveSettingsShortcut, &QShortcut::activated, this, [this]() {
     // Trigger save if on settings view
-    if (stackedWidget_->currentWidget() == settingsWidget_ && settingsWidget_) {
+    if (stackedWidget_->currentWidget() == settingsWidget_ && settingsWidget_ != nullptr) {
       settingsWidget_->saveSettings();
     }
   });
@@ -1373,7 +1373,7 @@ void MainWindow::updateTrayIcon(TrayConnectionState state) {
   }
 
   // Update the status label in the menu
-  if (trayMenu_ && !trayMenu_->actions().isEmpty()) {
+  if (trayMenu_ != nullptr && !trayMenu_->actions().isEmpty()) {
     auto* statusAction = trayMenu_->actions().first();
     switch (state) {
       case TrayConnectionState::kDisconnected:

@@ -414,7 +414,8 @@ struct AutoUpdater::Impl {
           task.wait();
           // NOLINTNEXTLINE(bugprone-empty-catch)
         } catch (const std::exception&) {
-          // Ignore exceptions during cleanup - nothing we can do at this point
+          // Intentionally empty: ignore exceptions during cleanup since
+          // the destructor cannot propagate them and there is no recovery.
         }
       }
     }

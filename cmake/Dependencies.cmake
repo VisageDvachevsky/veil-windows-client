@@ -138,6 +138,8 @@ if(VEIL_BUILD_TESTS)
   set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
   set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
   set(gtest_disable_pthreads OFF CACHE BOOL "" FORCE)
+  # Ensure GTest uses the same CRT as the project (required on MSVC)
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 
   FetchContent_Declare(
     googletest

@@ -62,7 +62,7 @@ TEST_F(SettingsWidgetTest, InitialState) {
 
 TEST_F(SettingsWidgetTest, GetServerAddressEmpty) {
   // Initially should return empty or default value
-  QString address = widget_->serverAddress();
+  [[maybe_unused]] QString address = widget_->serverAddress();
   // Should not crash
 }
 
@@ -73,12 +73,12 @@ TEST_F(SettingsWidgetTest, GetServerPortDefault) {
 }
 
 TEST_F(SettingsWidgetTest, GetKeyFilePathEmpty) {
-  QString keyPath = widget_->keyFilePath();
+  [[maybe_unused]] QString keyPath = widget_->keyFilePath();
   // Should not crash
 }
 
 TEST_F(SettingsWidgetTest, GetObfuscationSeedPathEmpty) {
-  QString seedPath = widget_->obfuscationSeedPath();
+  [[maybe_unused]] QString seedPath = widget_->obfuscationSeedPath();
   // Should not crash
 }
 

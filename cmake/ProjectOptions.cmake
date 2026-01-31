@@ -2,9 +2,20 @@ option(VEIL_ENABLE_LTO "Enable interprocedural optimization" OFF)
 option(VEIL_ENABLE_WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
 option(VEIL_ENABLE_SANITIZERS "Enable Address/Undefined sanitizers" ON)
 option(VEIL_ENABLE_CLANG_TIDY "Run clang-tidy during build if available" ON)
+option(VEIL_ENABLE_MSVC_ANALYZE "Enable MSVC /analyze static analysis (Windows only)" ON)
 option(VEIL_USE_SYSTEM_SODIUM "Prefer system-provided libsodium" OFF)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+# Ensure consistent /permissive- across ALL targets on MSVC (including
+# FetchContent dependencies like GTest).  Without this, std::string name
+# mangling in GTest differs from project code compiled with /permissive-,
+# causing LNK2001 unresolved-external errors when linking tests.
+# Note: CMAKE_CXX_FLAGS is used instead of add_compile_options() because
+# FetchContent subdirectories do not inherit directory-scoped options.
+if(MSVC)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /permissive-")
+endif()
 
 if(VEIL_ENABLE_LTO)
   include(CheckIPOSupported)
@@ -24,7 +35,11 @@ if(VEIL_ENABLE_SANITIZERS)
 endif()
 
 if(VEIL_ENABLE_CLANG_TIDY)
-  # Disable clang-tidy on Windows due to false positives with MSVC exception handling
+  # Disable clang-tidy on MSVC builds: the MSVC-bundled clang-tidy uses
+  # --driver-mode=cl and does not properly inherit /EHsc, causing false
+  # "cannot use 'throw' with exceptions disabled" errors.  The dedicated
+  # Windows Code Quality workflow runs clang-tidy separately with the
+  # LLVM/Clang compiler where exceptions work correctly.
   if(NOT MSVC)
     find_program(CLANG_TIDY_EXE NAMES clang-tidy)
     if(CLANG_TIDY_EXE)
@@ -32,10 +47,16 @@ if(VEIL_ENABLE_CLANG_TIDY)
       # globally, as that would apply to external dependencies too.
       # Instead, we'll apply it per-target using veil_set_warnings().
       set(VEIL_CLANG_TIDY_COMMAND "${CLANG_TIDY_EXE}" CACHE STRING "")
+      message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
     else()
       message(WARNING "clang-tidy requested but not found")
     endif()
   else()
-    message(STATUS "clang-tidy disabled on Windows (MSVC) due to false positives")
+    message(STATUS "clang-tidy disabled on MSVC builds (use Windows Code Quality workflow instead)")
   endif()
+endif()
+
+# MSVC /analyze static analysis (Windows only)
+if(VEIL_ENABLE_MSVC_ANALYZE AND MSVC)
+  message(STATUS "Enabling MSVC /analyze static analysis")
 endif()

@@ -1122,7 +1122,7 @@ void SettingsWidget::onLaunchOnStartupChanged([[maybe_unused]] int state) {
 #ifdef _WIN32
   // Update Windows registry to add/remove application from startup
   QSettings registrySettings(
-      "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+      R"(HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run)",
       QSettings::NativeFormat);
 
   const QString appName = "VEIL VPN Client";
@@ -1361,14 +1361,14 @@ bool SettingsWidget::isValidFilePath(const QString& path) const {
 bool SettingsWidget::isValidHostname(const QString& hostname) const {
   // Simple hostname validation
   static QRegularExpression hostnameRegex(
-      "^([a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?\\.)*[a-zA-Z]{2,}$");
+      R"(^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z]{2,}$)");
   return hostnameRegex.match(hostname).hasMatch();
 }
 
 bool SettingsWidget::isValidIpAddress(const QString& ip) const {
   // IPv4 validation
   static QRegularExpression ipv4Regex(
-      "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$");
+      R"(^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$)");
   return ipv4Regex.match(ip).hasMatch();
 }
 
@@ -1408,7 +1408,7 @@ void SettingsWidget::loadSettings() {
   // Check Windows registry for actual startup state
 #ifdef _WIN32
   QSettings registrySettings(
-      "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+      R"(HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run)",
       QSettings::NativeFormat);
   bool inStartup = registrySettings.contains("VEIL VPN Client");
   launchOnWindowsStartupCheck_->setChecked(inStartup);

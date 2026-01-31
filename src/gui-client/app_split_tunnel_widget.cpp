@@ -434,7 +434,7 @@ void AppSplitTunnelWidget::onAddCustomPath() {
   QString path = QFileDialog::getOpenFileName(
     this,
     "Select Executable",
-    "C:\\",
+    R"(C:\)",
     "Executable Files (*.exe *.com *.bat *.cmd);;All Files (*.*)"
   );
 
