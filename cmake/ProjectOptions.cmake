@@ -11,8 +11,10 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # FetchContent dependencies like GTest).  Without this, std::string name
 # mangling in GTest differs from project code compiled with /permissive-,
 # causing LNK2001 unresolved-external errors when linking tests.
+# Note: CMAKE_CXX_FLAGS is used instead of add_compile_options() because
+# FetchContent subdirectories do not inherit directory-scoped options.
 if(MSVC)
-  add_compile_options(/permissive-)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /permissive-")
 endif()
 
 if(VEIL_ENABLE_LTO)
