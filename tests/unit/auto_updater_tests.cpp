@@ -183,8 +183,8 @@ TEST(VersionTests, ToStringPrerelease) {
 
 TEST(ReleaseInfoTests, FindWindowsExeInstaller) {
   updater::ReleaseInfo release;
-  release.assets.push_back({"veil-setup-1.0.0.exe", "https://example.com/setup.exe", "application/x-msdownload", 1024});
-  release.assets.push_back({"source.tar.gz", "https://example.com/source.tar.gz", "application/gzip", 2048});
+  release.assets.push_back({"veil-setup-1.0.0.exe", "https://example.com/setup.exe", "application/x-msdownload", 1024, ""});
+  release.assets.push_back({"source.tar.gz", "https://example.com/source.tar.gz", "application/gzip", 2048, ""});
 
   auto installer = release.find_installer();
   ASSERT_TRUE(installer.has_value());
@@ -193,8 +193,8 @@ TEST(ReleaseInfoTests, FindWindowsExeInstaller) {
 
 TEST(ReleaseInfoTests, FindWindowsMsiInstaller) {
   updater::ReleaseInfo release;
-  release.assets.push_back({"veil-1.0.0.msi", "https://example.com/setup.msi", "application/x-msi", 1024});
-  release.assets.push_back({"README.md", "https://example.com/readme.md", "text/markdown", 100});
+  release.assets.push_back({"veil-1.0.0.msi", "https://example.com/setup.msi", "application/x-msi", 1024, ""});
+  release.assets.push_back({"README.md", "https://example.com/readme.md", "text/markdown", 100, ""});
 
   auto installer = release.find_installer();
   ASSERT_TRUE(installer.has_value());
@@ -203,7 +203,7 @@ TEST(ReleaseInfoTests, FindWindowsMsiInstaller) {
 
 TEST(ReleaseInfoTests, FindSetupSuffix) {
   updater::ReleaseInfo release;
-  release.assets.push_back({"veil-win64-setup.exe", "https://example.com/setup.exe", "application/octet-stream", 1024});
+  release.assets.push_back({"veil-win64-setup.exe", "https://example.com/setup.exe", "application/octet-stream", 1024, ""});
 
   auto installer = release.find_installer();
   ASSERT_TRUE(installer.has_value());
@@ -212,7 +212,7 @@ TEST(ReleaseInfoTests, FindSetupSuffix) {
 
 TEST(ReleaseInfoTests, FindWin64Installer) {
   updater::ReleaseInfo release;
-  release.assets.push_back({"veil-win64-1.0.0.exe", "https://example.com/win64.exe", "application/octet-stream", 1024});
+  release.assets.push_back({"veil-win64-1.0.0.exe", "https://example.com/win64.exe", "application/octet-stream", 1024, ""});
 
   auto installer = release.find_installer();
   ASSERT_TRUE(installer.has_value());
@@ -221,8 +221,8 @@ TEST(ReleaseInfoTests, FindWin64Installer) {
 
 TEST(ReleaseInfoTests, SkipLinuxAssets) {
   updater::ReleaseInfo release;
-  release.assets.push_back({"veil-linux-amd64", "https://example.com/linux", "application/octet-stream", 1024});
-  release.assets.push_back({"veil-setup-1.0.0.exe", "https://example.com/setup.exe", "application/x-msdownload", 1024});
+  release.assets.push_back({"veil-linux-amd64", "https://example.com/linux", "application/octet-stream", 1024, ""});
+  release.assets.push_back({"veil-setup-1.0.0.exe", "https://example.com/setup.exe", "application/x-msdownload", 1024, ""});
 
   auto installer = release.find_installer();
   ASSERT_TRUE(installer.has_value());
@@ -231,9 +231,9 @@ TEST(ReleaseInfoTests, SkipLinuxAssets) {
 
 TEST(ReleaseInfoTests, SkipMacOSAssets) {
   updater::ReleaseInfo release;
-  release.assets.push_back({"veil-macos.dmg", "https://example.com/macos.dmg", "application/octet-stream", 1024});
-  release.assets.push_back({"veil-darwin-arm64", "https://example.com/darwin", "application/octet-stream", 1024});
-  release.assets.push_back({"veil-1.0.0.exe", "https://example.com/setup.exe", "application/x-msdownload", 1024});
+  release.assets.push_back({"veil-macos.dmg", "https://example.com/macos.dmg", "application/octet-stream", 1024, ""});
+  release.assets.push_back({"veil-darwin-arm64", "https://example.com/darwin", "application/octet-stream", 1024, ""});
+  release.assets.push_back({"veil-1.0.0.exe", "https://example.com/setup.exe", "application/x-msdownload", 1024, ""});
 
   auto installer = release.find_installer();
   ASSERT_TRUE(installer.has_value());
@@ -242,8 +242,8 @@ TEST(ReleaseInfoTests, SkipMacOSAssets) {
 
 TEST(ReleaseInfoTests, NoInstallerFound) {
   updater::ReleaseInfo release;
-  release.assets.push_back({"source.tar.gz", "https://example.com/source.tar.gz", "application/gzip", 2048});
-  release.assets.push_back({"README.md", "https://example.com/readme.md", "text/markdown", 100});
+  release.assets.push_back({"source.tar.gz", "https://example.com/source.tar.gz", "application/gzip", 2048, ""});
+  release.assets.push_back({"README.md", "https://example.com/readme.md", "text/markdown", 100, ""});
 
   auto installer = release.find_installer();
   EXPECT_FALSE(installer.has_value());
@@ -259,7 +259,7 @@ TEST(ReleaseInfoTests, NoAssetsAvailable) {
 
 TEST(ReleaseInfoTests, CaseInsensitiveMatching) {
   updater::ReleaseInfo release;
-  release.assets.push_back({"VEIL-SETUP.EXE", "https://example.com/setup.exe", "application/octet-stream", 1024});
+  release.assets.push_back({"VEIL-SETUP.EXE", "https://example.com/setup.exe", "application/octet-stream", 1024, ""});
 
   auto installer = release.find_installer();
   ASSERT_TRUE(installer.has_value());
@@ -391,7 +391,7 @@ TEST(AutoUpdaterTests, ParseGitHubReleaseJSON) {
       ra.name = asset.value("name", "");
       ra.download_url = asset.value("browser_download_url", "");
       ra.content_type = asset.value("content_type", "");
-      ra.size = asset.value("size", 0);
+      ra.size = static_cast<std::size_t>(asset.value("size", 0));
       release.assets.push_back(ra);
     }
   }
