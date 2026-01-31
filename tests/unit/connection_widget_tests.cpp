@@ -203,33 +203,34 @@ TEST_F(ConnectionWidgetTest, SetErrorMessageLong) {
 
 TEST_F(ConnectionWidgetTest, SetStructuredError) {
   widget_->setConnectionState(ConnectionState::kError);
-  ErrorMessage error;
-  error.title = "Connection Failed";
-  error.message = "Unable to establish secure connection";
-  error.category = ErrorCategory::kConnection;
-  error.severity = ErrorSeverity::kError;
+  ErrorMessage error(
+      ErrorCategory::kNetwork,
+      "Connection Failed",
+      "Unable to establish secure connection",
+      "Check your network settings");
   widget_->setError(error);
   // Should display structured error
 }
 
 TEST_F(ConnectionWidgetTest, SetErrorWithDetails) {
   widget_->setConnectionState(ConnectionState::kError);
-  ErrorMessage error;
-  error.title = "Authentication Failed";
-  error.message = "Invalid credentials";
-  error.details = "Server returned 401 Unauthorized";
-  error.category = ErrorCategory::kAuth;
+  ErrorMessage error(
+      ErrorCategory::kPermission,
+      "Authentication Failed",
+      "Invalid credentials",
+      "Re-enter your credentials",
+      "Server returned 401 Unauthorized");
   widget_->setError(error);
-  // Should display error with details
+  // Should display error with technical details
 }
 
 TEST_F(ConnectionWidgetTest, SetErrorWithAction) {
   widget_->setConnectionState(ConnectionState::kError);
-  ErrorMessage error;
-  error.title = "Network Unreachable";
-  error.message = "Cannot reach VPN server";
-  error.actionText = "Check your internet connection";
-  error.category = ErrorCategory::kNetwork;
+  ErrorMessage error(
+      ErrorCategory::kNetwork,
+      "Network Unreachable",
+      "Cannot reach VPN server",
+      "Check your internet connection");
   widget_->setError(error);
   // Should display error with action text
 }
@@ -362,7 +363,7 @@ TEST_F(ConnectionWidgetTest, UpdateMetricsRapidly) {
 TEST_F(ConnectionWidgetTest, SessionInfoUpdatesRapidly) {
   for (int i = 0; i < 50; ++i) {
     widget_->setSessionId(QString("session-%1").arg(i));
-    widget_->setServerAddress(QString("server-%1.example.com").arg(i), 4433 + i);
+    widget_->setServerAddress(QString("server-%1.example.com").arg(i), static_cast<uint16_t>(4433 + i));
   }
 }
 
