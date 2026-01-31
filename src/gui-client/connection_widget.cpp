@@ -1,3 +1,4 @@
+// NOLINTBEGIN(bugprone-integer-division,readability-implicit-bool-conversion)
 #include "connection_widget.h"
 
 #include <QGroupBox>
@@ -15,6 +16,7 @@
 #include <QShortcut>
 
 #include "common/gui/theme.h"
+#include "quick_actions_widget.h"
 #include "server_selector_widget.h"
 
 namespace veil::gui {
@@ -107,35 +109,35 @@ class StatusRing : public QWidget {
       // Shield check icon
       painter.setBrush(baseColor);
       QPainterPath shield;
-      int iconSize = 36;
-      int ix = centerX - iconSize/2;
-      int iy = centerY - iconSize/2;
-      shield.moveTo(ix + iconSize/2, iy);
+      qreal iconSize = 36.0;
+      qreal ix = centerX - iconSize / 2.0;
+      qreal iy = centerY - iconSize / 2.0;
+      shield.moveTo(ix + iconSize / 2.0, iy);
       shield.lineTo(ix + iconSize, iy + iconSize * 0.3);
       shield.lineTo(ix + iconSize, iy + iconSize * 0.6);
-      shield.quadTo(ix + iconSize/2, iy + iconSize * 1.1, ix + iconSize/2, iy + iconSize);
-      shield.quadTo(ix + iconSize/2, iy + iconSize * 1.1, ix, iy + iconSize * 0.6);
+      shield.quadTo(ix + iconSize / 2.0, iy + iconSize * 1.1, ix + iconSize / 2.0, iy + iconSize);
+      shield.quadTo(ix + iconSize / 2.0, iy + iconSize * 1.1, ix, iy + iconSize * 0.6);
       shield.lineTo(ix, iy + iconSize * 0.3);
       shield.closeSubpath();
       painter.drawPath(shield);
 
       // Checkmark
       painter.setPen(QPen(QColor("#0d1117"), 3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-      painter.drawLine(ix + 12, iy + 20, ix + 16, iy + 26);
-      painter.drawLine(ix + 16, iy + 26, ix + 26, iy + 14);
+      painter.drawLine(QPointF(ix + 12, iy + 20), QPointF(ix + 16, iy + 26));
+      painter.drawLine(QPointF(ix + 16, iy + 26), QPointF(ix + 26, iy + 14));
     } else if (state_ == ConnectionState::kDisconnected) {
       // Shield outline
       painter.setPen(QPen(baseColor, 2));
       painter.setBrush(Qt::NoBrush);
       QPainterPath shield;
-      int iconSize = 36;
-      int ix = centerX - iconSize/2;
-      int iy = centerY - iconSize/2;
-      shield.moveTo(ix + iconSize/2, iy);
+      qreal iconSize = 36.0;
+      qreal ix = centerX - iconSize / 2.0;
+      qreal iy = centerY - iconSize / 2.0;
+      shield.moveTo(ix + iconSize / 2.0, iy);
       shield.lineTo(ix + iconSize, iy + iconSize * 0.3);
       shield.lineTo(ix + iconSize, iy + iconSize * 0.6);
-      shield.quadTo(ix + iconSize/2, iy + iconSize * 1.1, ix + iconSize/2, iy + iconSize);
-      shield.quadTo(ix + iconSize/2, iy + iconSize * 1.1, ix, iy + iconSize * 0.6);
+      shield.quadTo(ix + iconSize / 2.0, iy + iconSize * 1.1, ix + iconSize / 2.0, iy + iconSize);
+      shield.quadTo(ix + iconSize / 2.0, iy + iconSize * 1.1, ix, iy + iconSize * 0.6);
       shield.lineTo(ix, iy + iconSize * 0.3);
       shield.closeSubpath();
       painter.drawPath(shield);
@@ -169,7 +171,7 @@ ConnectionWidget::ConnectionWidget(QWidget* parent) : QWidget(parent) {
   auto* spaceShortcut = new QShortcut(QKeySequence(Qt::Key_Space), this);
   connect(spaceShortcut, &QShortcut::activated, this, [this]() {
     // Only trigger if connect button has focus
-    if (connectButton_ && connectButton_->hasFocus()) {
+    if (connectButton_ != nullptr && connectButton_->hasFocus()) {
       onConnectClicked();
     }
   });
@@ -378,7 +380,17 @@ void ConnectionWidget::setupUi() {
   connect(connectButton_, &QPushButton::clicked, this, &ConnectionWidget::onConnectClicked);
   mainLayout->addWidget(connectButton_);
 
-  mainLayout->addSpacing(spacing::kPaddingLarge());
+  mainLayout->addSpacing(spacing::kPaddingMedium());
+
+  // === Quick Actions Panel ===
+  quickActionsWidget_ = new QuickActionsWidget(this);
+  connect(quickActionsWidget_, &QuickActionsWidget::diagnosticsRequested,
+          this, &ConnectionWidget::diagnosticsRequested);
+  connect(quickActionsWidget_, &QuickActionsWidget::settingsRequested,
+          this, &ConnectionWidget::settingsRequested);
+  mainLayout->addWidget(quickActionsWidget_);
+
+  mainLayout->addSpacing(spacing::kPaddingMedium());
 
   // === Session Info Card ===
   statusCard_ = new QWidget(this);
@@ -513,8 +525,13 @@ void ConnectionWidget::setConnectionState(ConnectionState state) {
   state_ = state;
 
   // Update the status ring
-  if (statusRing_) {
+  if (statusRing_ != nullptr) {
     static_cast<StatusRing*>(statusRing_)->setState(state);
+  }
+
+  // Update quick actions widget
+  if (quickActionsWidget_ != nullptr) {
+    quickActionsWidget_->setConnectionState(state);
   }
 
   // Handle state transitions
@@ -731,6 +748,11 @@ void ConnectionWidget::setServerAddress(const QString& server, uint16_t port) {
   serverAddress_ = server;
   serverPort_ = port;
   serverLabel_->setText(QString("%1:%2").arg(server).arg(port));
+
+  // Update quick actions with server info
+  if (quickActionsWidget_ != nullptr) {
+    quickActionsWidget_->setIpAddress(server, port);
+  }
 }
 
 void ConnectionWidget::setErrorMessage(const QString& message) {
@@ -755,7 +777,7 @@ void ConnectionWidget::onPulseAnimation() {
     animationPhase_ -= 1.0;
   }
 
-  if (statusRing_) {
+  if (statusRing_ != nullptr) {
     static_cast<StatusRing*>(statusRing_)->setPulsePhase(animationPhase_);
   }
 }
@@ -784,7 +806,7 @@ void ConnectionWidget::startPulseAnimation() {
 void ConnectionWidget::stopPulseAnimation() {
   pulseTimer_->stop();
   animationPhase_ = 0.0;
-  if (statusRing_) {
+  if (statusRing_ != nullptr) {
     static_cast<StatusRing*>(statusRing_)->setPulsePhase(0.0);
   }
 }
@@ -848,5 +870,7 @@ void ConnectionWidget::loadServerSettings() {
   uint16_t serverPort = static_cast<uint16_t>(settings.value("server/port", 4433).toInt());
   setServerAddress(serverAddress, serverPort);
 }
+
+// NOLINTEND(bugprone-integer-division,readability-implicit-bool-conversion)
 
 }  // namespace veil::gui

@@ -8,6 +8,8 @@ if(WIN32)
     windows/system_tray.cpp
     windows/console_handler.cpp
     windows/app_enumerator.cpp
+    windows/shortcut_manager.cpp
+    windows/firewall_manager.cpp
   )
   # Windows doesn't use POSIX signals or daemonization
   set(VEIL_SIGNAL_SOURCES)
@@ -96,6 +98,7 @@ add_library(veil_common STATIC
   common/protocol_wrapper/websocket_wrapper.cpp
   common/protocol_wrapper/http_handshake_emulator.cpp
   common/protocol_wrapper/tls_wrapper.cpp
+  common/updater/auto_updater.cpp
   ${VEIL_SIGNAL_SOURCES}
   ${VEIL_DAEMON_SOURCES}
   common/ipc/ipc_protocol.cpp
@@ -119,6 +122,12 @@ target_link_libraries(veil_common
     nlohmann_json::nlohmann_json
 )
 
+# Non-Windows: link libcurl for auto_updater HTTP requests
+if(NOT WIN32)
+  find_package(CURL REQUIRED)
+  target_link_libraries(veil_common PUBLIC CURL::libcurl)
+endif()
+
 # Windows-specific libraries
 if(WIN32)
   target_link_libraries(veil_common
@@ -126,6 +135,8 @@ if(WIN32)
       iphlpapi
       ws2_32
       rpcrt4
+      ole32
+      shell32
   )
   target_compile_definitions(veil_common PUBLIC WIN32_LEAN_AND_MEAN NOMINMAX)
 

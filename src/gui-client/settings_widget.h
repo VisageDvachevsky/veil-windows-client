@@ -34,6 +34,7 @@ class SettingsWidget : public QWidget {
   void backRequested();
   void settingsSaved();
   void themeChanged(Theme theme);
+  void languageChanged(const QString& language);
 
  public slots:
   /// Load settings from config file
@@ -55,6 +56,8 @@ class SettingsWidget : public QWidget {
   void onBrowseKeyFile();
   void onBrowseObfuscationSeed();
   void onLaunchOnStartupChanged(int state);
+  void onCreateDesktopShortcut();
+  void onCreateStartMenuShortcut();
   void validateSettings();
   void onValidationDebounceTimeout();
 
@@ -102,6 +105,10 @@ class SettingsWidget : public QWidget {
   QCheckBox* startMinimizedCheck_;
   QCheckBox* autoConnectOnStartupCheck_;
   QCheckBox* launchOnWindowsStartupCheck_;
+  QPushButton* createDesktopShortcutButton_;
+  QPushButton* createStartMenuShortcutButton_;
+  QLabel* desktopShortcutStatusLabel_;
+  QLabel* startMenuShortcutStatusLabel_;
 
   // Routing
   QCheckBox* routeAllTrafficCheck_;
@@ -146,6 +153,7 @@ class SettingsWidget : public QWidget {
   QCheckBox* verboseLoggingCheck_;
   QCheckBox* developerModeCheck_;
   QComboBox* themeCombo_;
+  QComboBox* languageCombo_;
 
   // Buttons
   QPushButton* saveButton_;

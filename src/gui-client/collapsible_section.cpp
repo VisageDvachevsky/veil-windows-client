@@ -7,8 +7,10 @@
 
 namespace veil::gui {
 
+// NOLINTBEGIN(readability-implicit-bool-conversion)
+
 CollapsibleSection::CollapsibleSection(const QString& title, QWidget* parent)
-    : QWidget(parent), collapsed_(false), expandedHeight_(0) {
+    : QWidget(parent) {
   setupUi();
   setTitle(title);
 }
@@ -69,12 +71,12 @@ void CollapsibleSection::setupUi() {
 }
 
 void CollapsibleSection::setContent(QWidget* content) {
-  if (contentWidget_) {
+  if (contentWidget_ != nullptr) {
     contentLayout_->removeWidget(contentWidget_);
   }
 
   contentWidget_ = content;
-  if (contentWidget_) {
+  if (contentWidget_ != nullptr) {
     contentLayout_->addWidget(contentWidget_);
     contentWidget_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
   }
@@ -82,7 +84,7 @@ void CollapsibleSection::setContent(QWidget* content) {
   // Update expanded height
   if (!collapsed_) {
     contentContainer_->adjustSize();
-    expandedHeight_ = contentWidget_ ? contentWidget_->sizeHint().height() : 0;
+    expandedHeight_ = contentWidget_ != nullptr ? contentWidget_->sizeHint().height() : 0;
   }
 }
 
@@ -93,7 +95,7 @@ void CollapsibleSection::setCollapsed(bool collapsed) {
 
   collapsed_ = collapsed;
 
-  if (contentWidget_) {
+  if (contentWidget_ != nullptr) {
     // Store expanded height before collapsing
     if (collapsed) {
       expandedHeight_ = contentContainer_->height();
@@ -121,7 +123,7 @@ void CollapsibleSection::setCollapsedImmediate(bool collapsed) {
 
   collapsed_ = collapsed;
 
-  if (contentWidget_) {
+  if (contentWidget_ != nullptr) {
     if (collapsed) {
       contentContainer_->setMaximumHeight(0);
       contentWidget_->hide();
@@ -169,7 +171,7 @@ void CollapsibleSection::setContentHeight(int height) {
   contentContainer_->setMaximumHeight(height);
 
   // Show/hide content widget based on height
-  if (contentWidget_) {
+  if (contentWidget_ != nullptr) {
     if (height <= 0) {
       contentWidget_->hide();
     } else {
@@ -177,5 +179,7 @@ void CollapsibleSection::setContentHeight(int height) {
     }
   }
 }
+
+// NOLINTEND(readability-implicit-bool-conversion)
 
 }  // namespace veil::gui

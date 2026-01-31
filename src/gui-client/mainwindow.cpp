@@ -4,6 +4,7 @@
 #include <QStatusBar>
 #include <QVBoxLayout>
 #include <QApplication>
+#include <QClipboard>
 #include <QIcon>
 #include <QMessageBox>
 #include <QShortcut>
@@ -23,6 +24,7 @@
 #include <QDebug>
 #include <QProgressDialog>
 
+#include "common/constants.h"
 #include "common/gui/theme.h"
 #include "common/ipc/ipc_protocol.h"
 #include "common/version.h"
@@ -35,6 +37,9 @@
 #include "statistics_widget.h"
 #include "update_checker.h"
 #include "server_list_widget.h"
+#include "quick_actions_widget.h"
+#include "data_usage_widget.h"
+#include "usage_tracker.h"
 
 #ifdef _WIN32
 #include <chrono>
@@ -121,12 +126,18 @@ MainWindow::MainWindow(QWidget* parent)
       setupWizard_(new SetupWizard(this)),
       statisticsWidget_(new StatisticsWidget(this)),
       serverListWidget_(new ServerListWidget(this)),
+      dataUsageWidget_(nullptr),
+      usageTracker_(new UsageTracker(this)),
       ipcManager_(std::make_unique<IpcClientManager>(this)),
       trayIcon_(nullptr),
       trayMenu_(nullptr),
       trayConnectAction_(nullptr),
       trayDisconnectAction_(nullptr),
       updateChecker_(std::make_unique<UpdateChecker>(this)) {
+  // Load persistent usage data
+  usageTracker_->load();
+  dataUsageWidget_ = new DataUsageWidget(usageTracker_, this);
+
   qDebug() << "MainWindow: Initializing GUI components...";
   setupUi();
   setupIpcConnections();
@@ -171,37 +182,47 @@ MainWindow::MainWindow(QWidget* parent)
         connectionProgress->setLabelText(tr("Starting VEIL service..."));
         if (ensureServiceRunning()) {
           qDebug() << "MainWindow: Service startup succeeded, waiting for IPC server to be ready...";
-          // Wait for the service's IPC Named Pipe to be available before connecting
+          // Wait for the service's IPC Named Pipe to be available before connecting (async)
           connectionProgress->setLabelText(tr("Waiting for service to be ready..."));
-          if (waitForServiceReady(5000)) {
-            qDebug() << "MainWindow: Service IPC is ready, connecting...";
-            connectionProgress->setLabelText(tr("Connecting to daemon..."));
-            if (!ipcManager_->connectToDaemon()) {
-              qWarning() << "MainWindow: Failed to connect to daemon after service ready";
-              statusBar()->showMessage(tr("Failed to connect to daemon after service start"), 5000);
+          waitForServiceReadyAsync(5000, [this, connectionProgress](bool ready) {
+            if (ready) {
+              qDebug() << "MainWindow: Service IPC is ready, connecting...";
+              connectionProgress->setLabelText(tr("Connecting to daemon..."));
+              if (!ipcManager_->connectToDaemon()) {
+                qWarning() << "MainWindow: Failed to connect to daemon after service ready";
+                statusBar()->showMessage(tr("Failed to connect to daemon after service start"), 5000);
+              } else {
+                qDebug() << "MainWindow: Successfully connected to daemon after service start";
+              }
             } else {
-              qDebug() << "MainWindow: Successfully connected to daemon after service start";
+              qWarning() << "MainWindow: Timed out waiting for service IPC, attempting connection anyway...";
+              if (!ipcManager_->connectToDaemon()) {
+                qWarning() << "MainWindow: Failed to connect to daemon after timeout";
+                statusBar()->showMessage(tr("Failed to connect to daemon after service start"), 5000);
+              } else {
+                qDebug() << "MainWindow: Successfully connected to daemon despite timeout";
+              }
             }
-          } else {
-            qWarning() << "MainWindow: Timed out waiting for service IPC, attempting connection anyway...";
-            if (!ipcManager_->connectToDaemon()) {
-              qWarning() << "MainWindow: Failed to connect to daemon after timeout";
-              statusBar()->showMessage(tr("Failed to connect to daemon after service start"), 5000);
-            } else {
-              qDebug() << "MainWindow: Successfully connected to daemon despite timeout";
-            }
-          }
+            // Close the progress dialog after async operation completes
+            connectionProgress->close();
+            connectionProgress->deleteLater();
+          });
+          // Return early - the callback will handle completion
+          return;
         } else {
           qWarning() << "MainWindow: Failed to ensure service is running";
           statusBar()->showMessage(tr("Failed to start VEIL service - run as administrator"), 5000);
+          // Close the progress dialog
+          connectionProgress->close();
+          connectionProgress->deleteLater();
         }
       } else {
         qDebug() << "MainWindow: Successfully connected to daemon on retry";
         statusBar()->showMessage(tr("Connected to daemon"), 3000);
+        // Close the progress dialog
+        connectionProgress->close();
+        connectionProgress->deleteLater();
       }
-      // Close the progress dialog
-      connectionProgress->close();
-      connectionProgress->deleteLater();
     });
 #else
     statusBar()->showMessage(tr("Daemon not running - start veil-client first"), 5000);
@@ -279,6 +300,7 @@ void MainWindow::setupUi() {
   stackedWidget_->addWidget(diagnosticsWidget_);
   stackedWidget_->addWidget(statisticsWidget_);
   stackedWidget_->addWidget(serverListWidget_);
+  stackedWidget_->addWidget(dataUsageWidget_);
 
   // Set central widget
   setCentralWidget(stackedWidget_);
@@ -294,6 +316,8 @@ void MainWindow::setupUi() {
           this, &MainWindow::showSettingsView);
   connect(connectionWidget_, &ConnectionWidget::serversRequested,
           this, &MainWindow::showServerListView);
+  connect(connectionWidget_, &ConnectionWidget::diagnosticsRequested,
+          this, &MainWindow::showDiagnosticsView);
   connect(settingsWidget_, &SettingsWidget::backRequested,
           this, &MainWindow::showConnectionView);
   connect(diagnosticsWidget_, &DiagnosticsWidget::backRequested,
@@ -301,6 +325,8 @@ void MainWindow::setupUi() {
   connect(statisticsWidget_, &StatisticsWidget::backRequested,
           this, &MainWindow::showConnectionView);
   connect(serverListWidget_, &ServerListWidget::backRequested,
+          this, &MainWindow::showConnectionView);
+  connect(dataUsageWidget_, &DataUsageWidget::backRequested,
           this, &MainWindow::showConnectionView);
 
   // Update connection widget when settings are saved
@@ -466,27 +492,28 @@ void MainWindow::setupIpcConnections() {
 
         qDebug() << "[MainWindow] Service should be running now, waiting for IPC server to be ready...";
 
-        // Wait for service IPC to be ready, then retry connection
+        // Wait for service IPC to be ready, then retry connection (async)
         connectionWidget_->setConnectionState(ConnectionState::kConnecting);
         updateTrayIcon(TrayConnectionState::kConnecting);
 
-        bool service_ready = waitForServiceReady(5000);
-        if (!service_ready) {
-          qWarning() << "[MainWindow] Timed out waiting for service IPC, attempting connection anyway...";
-        }
+        waitForServiceReadyAsync(5000, [this](bool service_ready) {
+          if (!service_ready) {
+            qWarning() << "[MainWindow] Timed out waiting for service IPC, attempting connection anyway...";
+          }
 
-        qDebug() << "[MainWindow] Retrying daemon connection after service startup...";
-        if (!ipcManager_->connectToDaemon()) {
-          qWarning() << "[MainWindow] Failed to connect to daemon even after service start";
-          showError(errors::daemon_not_running(), true);
-        } else {
-          qDebug() << "[MainWindow] Successfully connected to daemon after service start";
-          qDebug() << "[MainWindow] Now building and sending connection configuration...";
+          qDebug() << "[MainWindow] Retrying daemon connection after service startup...";
+          if (!ipcManager_->connectToDaemon()) {
+            qWarning() << "[MainWindow] Failed to connect to daemon even after service start";
+            showError(errors::daemon_not_running(), true);
+          } else {
+            qDebug() << "[MainWindow] Successfully connected to daemon after service start";
+            qDebug() << "[MainWindow] Now building and sending connection configuration...";
 
-          // Now that we're connected, send the connect command with full config
-          ipc::ConnectionConfig config = buildConnectionConfig();
-          ipcManager_->sendConnect(config);
-        }
+            // Now that we're connected, send the connect command with full config
+            ipc::ConnectionConfig config = buildConnectionConfig();
+            ipcManager_->sendConnect(config);
+          }
+        });
         return;
 #else
         // Failed to connect to daemon - show error
@@ -576,6 +603,7 @@ void MainWindow::setupIpcConnections() {
 
         // Record session end in statistics with accumulated byte counts
         statisticsWidget_->onSessionEnded(lastTotalTxBytes_, lastTotalRxBytes_);
+        usageTracker_->onSessionEnded();
         lastTotalTxBytes_ = 0;
         lastTotalRxBytes_ = 0;
         break;
@@ -588,6 +616,7 @@ void MainWindow::setupIpcConnections() {
         qDebug() << "[MainWindow] New state: CONNECTED";
         guiState = ConnectionState::kConnected;
         updateTrayIcon(TrayConnectionState::kConnected);
+        usageTracker_->onSessionStarted();
 
         // Show connection established notification if enabled
         {
@@ -613,6 +642,7 @@ void MainWindow::setupIpcConnections() {
         updateTrayIcon(TrayConnectionState::kError);
         // Record session end in statistics with accumulated byte counts
         statisticsWidget_->onSessionEnded(lastTotalTxBytes_, lastTotalRxBytes_);
+        usageTracker_->onSessionEnded();
         lastTotalTxBytes_ = 0;
         lastTotalRxBytes_ = 0;
         break;
@@ -662,6 +692,9 @@ void MainWindow::setupIpcConnections() {
     // Track accumulated totals for session history
     lastTotalTxBytes_ = metrics.total_tx_bytes;
     lastTotalRxBytes_ = metrics.total_rx_bytes;
+
+    // Feed persistent usage tracker with total bytes
+    usageTracker_->recordBytes(metrics.total_tx_bytes, metrics.total_rx_bytes);
   });
 
   connect(ipcManager_.get(), &IpcClientManager::diagnosticsReceived,
@@ -734,6 +767,43 @@ void MainWindow::setupIpcConnections() {
     }
   });
 
+  // Connect usage tracker alert signals
+  connect(usageTracker_, &UsageTracker::warningThresholdReached,
+          this, [this](uint64_t currentUsage, uint64_t threshold) {
+    Q_UNUSED(threshold);
+    auto& prefs = NotificationPreferences::instance();
+    if (prefs.shouldShowNotification("usage_warning") && trayIcon_) {
+      QString msg = QString("Monthly data usage has reached %1")
+                        .arg(currentUsage >= 1073741824ULL
+                                 ? QString("%1 GB").arg(static_cast<double>(currentUsage) / 1073741824.0, 0, 'f', 1)
+                                 : QString("%1 MB").arg(static_cast<double>(currentUsage) / 1048576.0, 0, 'f', 1));
+      trayIcon_->showMessage("VEIL VPN - Usage Warning", msg,
+                             QSystemTrayIcon::Warning, 5000);
+      prefs.addToHistory("VEIL VPN - Usage Warning", msg, "usage_warning");
+    }
+  });
+
+  connect(usageTracker_, &UsageTracker::limitThresholdReached,
+          this, [this](uint64_t currentUsage, uint64_t limit) {
+    Q_UNUSED(limit);
+    auto& prefs = NotificationPreferences::instance();
+    if (trayIcon_ != nullptr) {
+      QString msg = QString("Monthly data usage limit reached (%1). ")
+                        .arg(currentUsage >= 1073741824ULL
+                                 ? QString("%1 GB").arg(static_cast<double>(currentUsage) / 1073741824.0, 0, 'f', 1)
+                                 : QString("%1 MB").arg(static_cast<double>(currentUsage) / 1048576.0, 0, 'f', 1));
+
+      if (usageTracker_->alertSettings().autoDisconnectAtLimit) {
+        msg += "Auto-disconnecting.";
+        ipcManager_->sendDisconnect();
+      }
+
+      trayIcon_->showMessage("VEIL VPN - Usage Limit", msg,
+                             QSystemTrayIcon::Critical, 5000);
+      prefs.addToHistory("VEIL VPN - Usage Limit", msg, "usage_limit");
+    }
+  });
+
   // Connect diagnostics widget request to IPC manager
   connect(diagnosticsWidget_, &DiagnosticsWidget::diagnosticsRequested,
           this, [this]() {
@@ -802,6 +872,10 @@ void MainWindow::setupMenuBar() {
   statisticsAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_4));
   connect(statisticsAction, &QAction::triggered, this, &MainWindow::showStatisticsView);
 
+  auto* dataUsageAction = viewMenu->addAction(tr("Data &Usage"));
+  dataUsageAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_5));
+  connect(dataUsageAction, &QAction::triggered, this, &MainWindow::showDataUsageView);
+
   viewMenu->addSeparator();
 
   auto* minimizeAction = viewMenu->addAction(tr("&Minimize to Tray"));
@@ -858,6 +932,15 @@ void MainWindow::setupMenuBar() {
 
   auto* openSettingsShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma), this);
   connect(openSettingsShortcut, &QShortcut::activated, this, &MainWindow::showSettingsView);
+
+  // Quick actions shortcut
+  auto* quickActionsShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Q), this);
+  connect(quickActionsShortcut, &QShortcut::activated, this, [this]() {
+    // Ensure we are on the connection view first
+    if (stackedWidget_->currentIndex() != 0) {
+      showConnectionView();
+    }
+  });
 
   auto* refreshDiagnosticsShortcut = new QShortcut(QKeySequence(Qt::Key_F5), this);
   connect(refreshDiagnosticsShortcut, &QShortcut::activated, this, [this]() {
@@ -966,6 +1049,12 @@ void MainWindow::showStatisticsView() {
 void MainWindow::showServerListView() {
   stackedWidget_->setCurrentWidgetAnimated(stackedWidget_->indexOf(serverListWidget_));
   statusBar()->showMessage(tr("Server Management"));
+}
+
+void MainWindow::showDataUsageView() {
+  dataUsageWidget_->refresh();
+  stackedWidget_->setCurrentWidgetAnimated(stackedWidget_->indexOf(dataUsageWidget_));
+  statusBar()->showMessage(tr("Data Usage"));
 }
 
 void MainWindow::showSetupWizardIfNeeded() {
@@ -1123,6 +1212,54 @@ void MainWindow::setupSystemTray() {
 
   trayMenu_->addSeparator();
 
+  // Quick actions in tray
+  trayKillSwitchAction_ = trayMenu_->addAction(tr("Kill Switch: OFF"));
+  trayKillSwitchAction_->setCheckable(true);
+  connect(trayKillSwitchAction_, &QAction::triggered, this, [this](bool checked) {
+    QSettings settings("VEIL", "VPN Client");
+    settings.setValue("quickActions/killSwitch", checked);
+    trayKillSwitchAction_->setText(checked ? tr("Kill Switch: ON") : tr("Kill Switch: OFF"));
+  });
+
+  trayObfuscationAction_ = trayMenu_->addAction(tr("Obfuscation: ON"));
+  trayObfuscationAction_->setCheckable(true);
+  trayObfuscationAction_->setChecked(true);
+  {
+    QSettings settings("VEIL", "VPN Client");
+    bool obfEnabled = settings.value("advanced/obfuscation", true).toBool();
+    trayObfuscationAction_->setChecked(obfEnabled);
+    trayObfuscationAction_->setText(obfEnabled ? tr("Obfuscation: ON") : tr("Obfuscation: OFF"));
+    bool ksEnabled = settings.value("quickActions/killSwitch", false).toBool();
+    trayKillSwitchAction_->setChecked(ksEnabled);
+    trayKillSwitchAction_->setText(ksEnabled ? tr("Kill Switch: ON") : tr("Kill Switch: OFF"));
+  }
+  connect(trayObfuscationAction_, &QAction::triggered, this, [this](bool checked) {
+    QSettings settings("VEIL", "VPN Client");
+    settings.setValue("advanced/obfuscation", checked);
+    trayObfuscationAction_->setText(checked ? tr("Obfuscation: ON") : tr("Obfuscation: OFF"));
+  });
+
+  trayCopyIpAction_ = trayMenu_->addAction(tr("Copy IP Address"));
+  trayCopyIpAction_->setEnabled(false);
+  connect(trayCopyIpAction_, &QAction::triggered, this, [this]() {
+    QSettings settings("VEIL", "VPN Client");
+    QString ip = settings.value("server/address", "").toString();
+    int port = settings.value("server/port", 4433).toInt();
+    if (!ip.isEmpty()) {
+      QApplication::clipboard()->setText(QString("%1:%2").arg(ip).arg(port));
+    }
+  });
+
+  trayDiagnosticsAction_ = trayMenu_->addAction(tr("Open Diagnostics"));
+  connect(trayDiagnosticsAction_, &QAction::triggered, this, [this]() {
+    show();
+    raise();
+    activateWindow();
+    showDiagnosticsView();
+  });
+
+  trayMenu_->addSeparator();
+
   // Show window action
   auto* showAction = trayMenu_->addAction(tr("Show Window"));
   connect(showAction, &QAction::triggered, this, [this]() {
@@ -1187,7 +1324,7 @@ void MainWindow::onQuickDisconnect() {
 }
 
 void MainWindow::updateTrayIcon(TrayConnectionState state) {
-  if (!trayIcon_) return;
+  if (trayIcon_ == nullptr) return;
 
   currentTrayState_ = state;
   QString iconPath;
@@ -1225,11 +1362,14 @@ void MainWindow::updateTrayIcon(TrayConnectionState state) {
   trayIcon_->setIcon(QIcon(iconPath));
   trayIcon_->setToolTip(tooltip);
 
-  if (trayConnectAction_) {
+  if (trayConnectAction_ != nullptr) {
     trayConnectAction_->setEnabled(connectEnabled);
   }
-  if (trayDisconnectAction_) {
+  if (trayDisconnectAction_ != nullptr) {
     trayDisconnectAction_->setEnabled(disconnectEnabled);
+  }
+  if (trayCopyIpAction_ != nullptr) {
+    trayCopyIpAction_->setEnabled(state == TrayConnectionState::kConnected);
   }
 
   // Update the status label in the menu
@@ -1675,48 +1815,66 @@ bool MainWindow::ensureServiceRunning() {
   return false;
 }
 
-bool MainWindow::waitForServiceReady(int timeout_ms) {
-  static constexpr const char* kReadyEventName = "Global\\VEIL_SERVICE_READY";
-  static constexpr const char* kPipeName = "\\\\.\\pipe\\veil-client";
-  static constexpr int kPollIntervalMs = 100;
-
-  qDebug() << "waitForServiceReady: Waiting up to" << timeout_ms << "ms for service IPC to be ready...";
-
-  // Phase 1: Try the Windows Event signal (set by the service after IPC server starts)
-  HANDLE event = OpenEventA(SYNCHRONIZE, FALSE, kReadyEventName);
-  if (event) {
-    qDebug() << "waitForServiceReady: Found service ready event, waiting for signal...";
-    DWORD result = WaitForSingleObject(event, static_cast<DWORD>(timeout_ms));
+bool MainWindow::checkServiceReady() {
+  // Phase 1: Try the Windows Event signal (non-blocking check)
+  HANDLE event = OpenEventA(SYNCHRONIZE, FALSE, veil::kServiceReadyEventName);
+  if (event != nullptr) {
+    DWORD result = WaitForSingleObject(event, 0);  // 0 = immediate check, no wait
     CloseHandle(event);
     if (result == WAIT_OBJECT_0) {
-      qDebug() << "waitForServiceReady: Service ready event signaled - IPC server is ready";
+      qDebug() << "checkServiceReady: Service ready event signaled - IPC server is ready";
       return true;
     }
-    qWarning() << "waitForServiceReady: Wait on event timed out or failed (result:" << result << ")";
-  } else {
-    qDebug() << "waitForServiceReady: Service ready event not found, falling back to Named Pipe polling";
   }
 
-  // Phase 2: Fall back to polling for Named Pipe existence
-  // This handles the case where the service was already running (event already signaled
-  // and possibly cleaned up) or the event could not be created.
-  auto start = std::chrono::steady_clock::now();
-  while (true) {
-    if (WaitNamedPipeA(kPipeName, 0)) {
-      qDebug() << "waitForServiceReady: Named Pipe is available - IPC server is ready";
-      return true;
+  // Phase 2: Check if Named Pipe is available (non-blocking)
+  if (WaitNamedPipeA(veil::kIpcClientPipeName, 0)) {  // 0 = immediate check, no wait
+    qDebug() << "checkServiceReady: Named Pipe is available - IPC server is ready";
+    return true;
+  }
+
+  return false;
+}
+
+void MainWindow::waitForServiceReadyAsync(int timeout_ms, std::function<void(bool)> callback) {
+  static constexpr int kPollIntervalMs = 100;
+
+  qDebug() << "waitForServiceReadyAsync: Waiting up to" << timeout_ms
+           << "ms for service IPC to be ready (non-blocking)...";
+
+  // Check immediately first
+  if (checkServiceReady()) {
+    qDebug() << "waitForServiceReadyAsync: Service is already ready";
+    callback(true);
+    return;
+  }
+
+  // Set up polling with QTimer (non-blocking, keeps UI responsive)
+  auto startTime = std::chrono::steady_clock::now();
+  auto* timer = new QTimer(this);
+  timer->setInterval(kPollIntervalMs);
+
+  connect(timer, &QTimer::timeout, this, [this, timer, startTime, timeout_ms, callback]() {
+    if (checkServiceReady()) {
+      qDebug() << "waitForServiceReadyAsync: Service is ready";
+      timer->stop();
+      timer->deleteLater();
+      callback(true);
+      return;
     }
 
-    auto elapsed = std::chrono::steady_clock::now() - start;
+    // Check if we've timed out
+    auto elapsed = std::chrono::steady_clock::now() - startTime;
     auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
     if (elapsed_ms >= timeout_ms) {
-      qWarning() << "waitForServiceReady: Timed out after" << elapsed_ms
-                 << "ms waiting for Named Pipe";
-      return false;
+      qWarning() << "waitForServiceReadyAsync: Timed out after" << elapsed_ms << "ms";
+      timer->stop();
+      timer->deleteLater();
+      callback(false);
     }
+  });
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(kPollIntervalMs));
-  }
+  timer->start();
 }
 #endif
 

@@ -18,16 +18,19 @@
 #include <filesystem>
 #include <iostream>
 #include <map>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <type_traits>
 
+#include "../common/constants.h"
 #include "../common/ipc/ipc_protocol.h"
 #include "../common/ipc/ipc_socket.h"
 #include "../common/logging/logger.h"
 #include "../tunnel/tunnel.h"
 #include "../tun/routing.h"
 #include "console_handler.h"
+#include "firewall_manager.h"
 #include "service_manager.h"
 
 using namespace veil;
@@ -45,6 +48,7 @@ struct ServiceStats {
 static std::atomic<bool> g_running{false};
 static std::atomic<bool> g_connected{false};
 static std::unique_ptr<ipc::IpcServer> g_ipc_server;
+static std::mutex g_ipc_server_mutex;  // Protects g_ipc_server from concurrent access
 static ServiceStats g_stats;
 static std::unique_ptr<tunnel::Tunnel> g_tunnel;
 static std::unique_ptr<std::thread> g_tunnel_thread;
@@ -53,9 +57,6 @@ static bool g_routes_configured{false};
 static bool g_route_all_traffic{false};
 static std::vector<std::string> g_custom_routes;
 static HANDLE g_ready_event{nullptr};
-
-// Name of the Windows Event used to signal that the IPC server is ready
-static constexpr const char* kServiceReadyEventName = "Global\\VEIL_SERVICE_READY";
 
 // Forward declarations
 void WINAPI service_main(DWORD argc, LPSTR* argv);
@@ -268,10 +269,10 @@ void WINAPI service_main(DWORD /*argc*/, LPSTR* /*argv*/) {
 // connect before the Named Pipe is created.
 
 void signal_ready() {
-  g_ready_event = CreateEventA(nullptr, TRUE, FALSE, kServiceReadyEventName);
+  g_ready_event = CreateEventA(nullptr, TRUE, FALSE, veil::kServiceReadyEventName);
   if (g_ready_event) {
     SetEvent(g_ready_event);
-    LOG_INFO("Service ready event signaled: {}", kServiceReadyEventName);
+    LOG_INFO("Service ready event signaled: {}", veil::kServiceReadyEventName);
   } else {
     LOG_WARN("Failed to create service ready event (error {}), GUI will "
              "fall back to Named Pipe polling",
@@ -316,7 +317,7 @@ void run_service() {
     LOG_WARN("Service will continue but GUI will not be able to connect");
   } else {
     LOG_INFO("IPC server started successfully");
-    LOG_INFO("Listening on named pipe: \\\\.\\pipe\\veil-client");
+    LOG_INFO("Listening on named pipe: {}", veil::kIpcClientPipeName);
     signal_ready();
   }
 
@@ -332,20 +333,45 @@ void run_service() {
   // Main service loop
   LOG_DEBUG("Entering main service loop");
   std::chrono::steady_clock::time_point last_status_log = std::chrono::steady_clock::now();
+  std::chrono::steady_clock::time_point last_heartbeat = std::chrono::steady_clock::now();
+  constexpr int kHeartbeatIntervalSec = 10;
 
   while (g_running) {
     // Poll IPC server for messages
-    if (g_ipc_server) {
-      std::error_code ipc_ec;
-      g_ipc_server->poll(ipc_ec);
-      if (ipc_ec && ipc_ec.value() != 0) {
-        // Only log actual errors, not "would block" conditions
-        LOG_DEBUG("IPC poll error (may be normal): {}", ipc_ec.message());
+    {
+      std::lock_guard<std::mutex> lock(g_ipc_server_mutex);
+      if (g_ipc_server) {
+        std::error_code ipc_ec;
+        g_ipc_server->poll(ipc_ec);
+        if (ipc_ec && ipc_ec.value() != 0) {
+          // Only log actual errors, not "would block" conditions
+          LOG_DEBUG("IPC poll error (may be normal): {}", ipc_ec.message());
+        }
       }
     }
 
-    // Periodic status logging (every 60 seconds)
+    // Send heartbeat to all connected clients (every 10 seconds)
     auto now = std::chrono::steady_clock::now();
+    if (std::chrono::duration_cast<std::chrono::seconds>(now - last_heartbeat).count() >= kHeartbeatIntervalSec) {
+      std::lock_guard<std::mutex> lock(g_ipc_server_mutex);
+      if (g_ipc_server) {
+        // Send heartbeat event to all connected clients
+        ipc::HeartbeatEvent heartbeat_event;
+        heartbeat_event.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::system_clock::now().time_since_epoch()
+        ).count();
+
+        ipc::Message heartbeat_msg;
+        heartbeat_msg.type = ipc::MessageType::kEvent;
+        heartbeat_msg.payload = ipc::Event{heartbeat_event};
+
+        g_ipc_server->broadcast_message(heartbeat_msg);
+        LOG_DEBUG("Heartbeat sent to all clients (timestamp: {})", heartbeat_event.timestamp_ms);
+      }
+      last_heartbeat = now;
+    }
+
+    // Periodic status logging (every 60 seconds)
     if (std::chrono::duration_cast<std::chrono::seconds>(now - last_status_log).count() >= 60) {
       LOG_DEBUG("Service status: running={}, connected={}", g_running.load(), g_connected.load());
       if (g_tunnel) {
@@ -380,11 +406,14 @@ void run_service() {
     LOG_INFO("VPN tunnel stopped and cleaned up");
   }
 
-  if (g_ipc_server) {
-    LOG_DEBUG("Stopping IPC server...");
-    g_ipc_server->stop();
-    g_ipc_server.reset();
-    LOG_INFO("IPC server stopped");
+  {
+    std::lock_guard<std::mutex> lock(g_ipc_server_mutex);
+    if (g_ipc_server) {
+      LOG_DEBUG("Stopping IPC server...");
+      g_ipc_server->stop();
+      g_ipc_server.reset();
+      LOG_INFO("IPC server stopped");
+    }
   }
 
   LOG_INFO("========================================");
@@ -398,10 +427,8 @@ void stop_service() {
   // Close the service ready event handle
   close_ready_event();
 
-  // Also stop the tunnel if it's running
-  if (g_tunnel) {
-    g_tunnel->stop();
-  }
+  // Note: Tunnel cleanup (including stop()) is handled in run_service() cleanup path.
+  // Tunnel::stop() is now idempotent, so multiple calls are safe if needed.
 }
 
 // ============================================================================
@@ -512,6 +539,7 @@ void cleanup_routes() {
 // ============================================================================
 
 static std::string g_firewall_rule_name;
+static std::unique_ptr<FirewallManager> g_firewall_manager;
 
 void configure_firewall_rule(std::uint16_t port) {
   // Create a firewall rule to allow incoming UDP traffic on the VPN port
@@ -519,24 +547,42 @@ void configure_firewall_rule(std::uint16_t port) {
 
   g_firewall_rule_name = "VEIL_VPN_UDP_" + std::to_string(port);
 
+  LOG_INFO("Adding Windows Firewall rule for UDP port {}", port);
+
+  // Create FirewallManager instance if not already created
+  if (!g_firewall_manager) {
+    g_firewall_manager = std::make_unique<FirewallManager>();
+    std::string error;
+    if (!g_firewall_manager->initialize(error)) {
+      LOG_ERROR("Failed to initialize FirewallManager: {}", error);
+      LOG_WARN("Firewall rule creation failed. This may affect incoming VPN packets.");
+      LOG_WARN("You may need to manually add a firewall rule for UDP port {}", port);
+      g_firewall_manager.reset();
+      return;
+    }
+  }
+
+  std::string error;
+
   // First, try to delete any existing rule with the same name
-  std::string delete_cmd = "netsh advfirewall firewall delete rule name=\"" + g_firewall_rule_name + "\" >nul 2>&1";
-  system(delete_cmd.c_str());
+  if (g_firewall_manager->rule_exists(g_firewall_rule_name)) {
+    LOG_DEBUG("Removing existing firewall rule '{}'", g_firewall_rule_name);
+    if (!g_firewall_manager->remove_rule(g_firewall_rule_name, error)) {
+      LOG_WARN("Failed to remove existing firewall rule: {}", error);
+      // Continue anyway, the Add operation might overwrite it
+    }
+  }
 
   // Create the inbound rule for UDP
-  std::string add_cmd = "netsh advfirewall firewall add rule "
-                        "name=\"" + g_firewall_rule_name + "\" "
-                        "dir=in action=allow protocol=UDP localport=" + std::to_string(port) + " "
-                        "enable=yes profile=any";
-
-  LOG_INFO("Adding Windows Firewall rule for UDP port {}", port);
-  LOG_DEBUG("Firewall command: {}", add_cmd);
-
-  int result = system(add_cmd.c_str());
-  if (result == 0) {
+  std::string description = "Allow incoming UDP traffic for VEIL VPN on port " + std::to_string(port);
+  if (g_firewall_manager->add_rule(g_firewall_rule_name, description,
+                                    FirewallManager::Direction::kInbound,
+                                    FirewallManager::Protocol::kUDP, port,
+                                    FirewallManager::Action::kAllow, true, error)) {
     LOG_INFO("Firewall rule '{}' created successfully", g_firewall_rule_name);
   } else {
-    LOG_WARN("Failed to create firewall rule (exit code: {}). This may affect incoming VPN packets.", result);
+    LOG_ERROR("Failed to create firewall rule: {}", error);
+    LOG_WARN("This may affect incoming VPN packets.");
     LOG_WARN("You may need to manually add a firewall rule for UDP port {}", port);
   }
 }
@@ -546,9 +592,15 @@ void cleanup_firewall_rule() {
     return;
   }
 
-  std::string delete_cmd = "netsh advfirewall firewall delete rule name=\"" + g_firewall_rule_name + "\" >nul 2>&1";
   LOG_INFO("Removing Windows Firewall rule '{}'", g_firewall_rule_name);
-  system(delete_cmd.c_str());
+
+  if (g_firewall_manager) {
+    std::string error;
+    if (!g_firewall_manager->remove_rule(g_firewall_rule_name, error)) {
+      LOG_WARN("Failed to remove firewall rule: {}", error);
+    }
+  }
+
   g_firewall_rule_name.clear();
 }
 
@@ -557,6 +609,7 @@ void cleanup_firewall_rule() {
 // ============================================================================
 
 void handle_ipc_message(const ipc::Message& msg, int client_fd) {
+#ifndef NDEBUG
   LOG_DEBUG("========================================");
   LOG_DEBUG("IPC MESSAGE RECEIVED");
   LOG_DEBUG("========================================");
@@ -564,6 +617,7 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
   if (msg.id) {
     LOG_DEBUG("Message ID: {}", *msg.id);
   }
+#endif
 
   if (!std::holds_alternative<ipc::Command>(msg.payload)) {
     LOG_WARN("Received non-command message from client");
@@ -574,7 +628,9 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
   }
 
   const auto& cmd = std::get<ipc::Command>(msg.payload);
+#ifndef NDEBUG
   LOG_DEBUG("Successfully extracted Command from payload");
+#endif
 
   ipc::Message response_msg;
   response_msg.type = ipc::MessageType::kResponse;
@@ -587,6 +643,7 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
         using T = std::decay_t<decltype(command)>;
 
         if constexpr (std::is_same_v<T, ipc::ConnectCommand>) {
+#ifndef NDEBUG
           LOG_DEBUG("========================================");
           LOG_DEBUG("PROCESSING CONNECT COMMAND");
           LOG_DEBUG("========================================");
@@ -600,6 +657,7 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
           LOG_DEBUG("Enable obfuscation: {}", command.config.enable_obfuscation);
           LOG_DEBUG("Auto reconnect: {}", command.config.auto_reconnect);
           LOG_DEBUG("Route all traffic: {}", command.config.route_all_traffic);
+#endif
 
           if (g_connected) {
             LOG_WARN("Already connected - rejecting connection request");
@@ -637,6 +695,7 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
 
             // Log configuration for debugging
             LOG_INFO("Connecting to {}:{}", g_tunnel_config.server_address, g_tunnel_config.server_port);
+#ifndef NDEBUG
             if (!g_tunnel_config.key_file.empty()) {
               LOG_DEBUG("Using pre-shared key file: {}", g_tunnel_config.key_file);
             } else {
@@ -648,6 +707,11 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
 
             // Create and initialize tunnel
             LOG_DEBUG("Creating tunnel instance with configuration...");
+#else
+            if (g_tunnel_config.key_file.empty()) {
+              LOG_WARN("No pre-shared key file specified - handshake will fail!");
+            }
+#endif
             g_tunnel = std::make_unique<tunnel::Tunnel>(g_tunnel_config);
 
             // Set up state change callback to configure routes when connected
@@ -660,7 +724,9 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
               }
             });
 
+#ifndef NDEBUG
             LOG_DEBUG("Initializing tunnel...");
+#endif
             std::error_code ec;
             if (!g_tunnel->initialize(ec)) {
               LOG_ERROR("========================================");
@@ -685,10 +751,15 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
                 LOG_WARN("Could not determine actual UDP port, skipping firewall rule");
               }
 
+#ifndef NDEBUG
               LOG_DEBUG("Starting tunnel thread...");
+#endif
 
               // Start tunnel in background thread
-              g_tunnel_thread = std::make_unique<std::thread>([&]() {
+              // Note: Lambda captures nothing by value/reference because all variables
+              // used are globals. This avoids use-after-free bugs from capturing
+              // stack-local variables from the std::visit visitor lambda.
+              g_tunnel_thread = std::make_unique<std::thread>([]() {
                 LOG_INFO("========================================");
                 LOG_INFO("VPN TUNNEL THREAD STARTED");
                 LOG_INFO("========================================");
@@ -713,8 +784,11 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
                 ipc::Message event_msg;
                 event_msg.type = ipc::MessageType::kEvent;
                 event_msg.payload = ipc::Event{event};
-                if (g_ipc_server) {
-                  g_ipc_server->broadcast_message(event_msg);
+                {
+                  std::lock_guard<std::mutex> lock(g_ipc_server_mutex);
+                  if (g_ipc_server) {
+                    g_ipc_server->broadcast_message(event_msg);
+                  }
                 }
               });
 
@@ -723,11 +797,15 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
               LOG_INFO("========================================");
               LOG_INFO("VPN CONNECTION ESTABLISHED");
               LOG_INFO("========================================");
+#ifndef NDEBUG
               LOG_DEBUG("Setting response to SuccessResponse");
+#endif
               response = ipc::SuccessResponse{"Connected successfully"};
 
               // Broadcast connection event
+#ifndef NDEBUG
               LOG_DEBUG("Broadcasting connection state change event...");
+#endif
               ipc::ConnectionStateChangeEvent event;
               event.old_state = ipc::ConnectionState::kDisconnected;
               event.new_state = ipc::ConnectionState::kConnected;
@@ -736,12 +814,21 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
               ipc::Message event_msg;
               event_msg.type = ipc::MessageType::kEvent;
               event_msg.payload = ipc::Event{event};
-              g_ipc_server->broadcast_message(event_msg);
+              {
+                std::lock_guard<std::mutex> lock(g_ipc_server_mutex);
+                if (g_ipc_server) {
+                  g_ipc_server->broadcast_message(event_msg);
+                }
+              }
+#ifndef NDEBUG
               LOG_DEBUG("Connection state change event broadcasted");
+#endif
             }
           }
         } else if constexpr (std::is_same_v<T, ipc::DisconnectCommand>) {
+#ifndef NDEBUG
           LOG_DEBUG("Received DisconnectCommand");
+#endif
           if (g_connected && g_tunnel) {
             LOG_INFO("Stopping VPN tunnel...");
 
@@ -768,12 +855,19 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
             ipc::Message event_msg;
             event_msg.type = ipc::MessageType::kEvent;
             event_msg.payload = ipc::Event{event};
-            g_ipc_server->broadcast_message(event_msg);
+            {
+              std::lock_guard<std::mutex> lock(g_ipc_server_mutex);
+              if (g_ipc_server) {
+                g_ipc_server->broadcast_message(event_msg);
+              }
+            }
           } else {
             response = ipc::ErrorResponse{"Not connected", ""};
           }
         } else if constexpr (std::is_same_v<T, ipc::GetStatusCommand>) {
+#ifndef NDEBUG
           LOG_DEBUG("Received GetStatusCommand");
+#endif
           ipc::StatusResponse status_resp;
           status_resp.status.state = g_connected
                                          ? ipc::ConnectionState::kConnected
@@ -788,7 +882,9 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
           }
           response = status_resp;
         } else if constexpr (std::is_same_v<T, ipc::GetMetricsCommand>) {
+#ifndef NDEBUG
           LOG_DEBUG("Received GetMetricsCommand");
+#endif
           ipc::MetricsResponse metrics_resp;
           if (g_tunnel) {
             const auto& stats = g_tunnel->stats();
@@ -800,7 +896,9 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
           }
           response = metrics_resp;
         } else if constexpr (std::is_same_v<T, ipc::GetDiagnosticsCommand>) {
+#ifndef NDEBUG
           LOG_DEBUG("Received GetDiagnosticsCommand");
+#endif
           ipc::DiagnosticsResponse diag_resp;
           if (g_tunnel) {
             const auto& stats = g_tunnel->stats();
@@ -812,7 +910,9 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
           }
           response = diag_resp;
         } else if constexpr (std::is_same_v<T, ipc::UpdateConfigCommand>) {
+#ifndef NDEBUG
           LOG_DEBUG("Received UpdateConfigCommand");
+#endif
           // Store config for next connection
           g_tunnel_config.server_address = command.config.server_address;
           g_tunnel_config.server_port = command.config.server_port;
@@ -839,11 +939,15 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
           }
           response = ipc::SuccessResponse{"Configuration updated"};
         } else if constexpr (std::is_same_v<T, ipc::ExportDiagnosticsCommand>) {
+#ifndef NDEBUG
           LOG_DEBUG("Received ExportDiagnosticsCommand");
+#endif
           response = ipc::ErrorResponse{
               "Export diagnostics not yet implemented on Windows", ""};
         } else if constexpr (std::is_same_v<T, ipc::GetClientListCommand>) {
+#ifndef NDEBUG
           LOG_DEBUG("Received GetClientListCommand");
+#endif
           ipc::ClientListResponse list_resp;
           // Empty client list - we're not a server
           response = list_resp;
@@ -858,6 +962,7 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
       cmd);
 
   // Log response details before sending
+#ifndef NDEBUG
   LOG_DEBUG("========================================");
   LOG_DEBUG("SENDING IPC RESPONSE");
   LOG_DEBUG("========================================");
@@ -895,12 +1000,19 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
       LOG_WARN("Response type: UNKNOWN!");
     }
   }
+#endif
 
   std::error_code ec;
-  if (!g_ipc_server->send_message(client_fd, response_msg, ec)) {
-    LOG_ERROR("Failed to send IPC response: {}", ec.message());
-  } else {
-    LOG_DEBUG("IPC response sent successfully");
+  {
+    std::lock_guard<std::mutex> lock(g_ipc_server_mutex);
+    if (g_ipc_server && !g_ipc_server->send_message(client_fd, response_msg, ec)) {
+      LOG_ERROR("Failed to send IPC response: {}", ec.message());
+    }
+#ifndef NDEBUG
+    else if (g_ipc_server) {
+      LOG_DEBUG("IPC response sent successfully");
+    }
+#endif
   }
   LOG_DEBUG("========================================");
 }
