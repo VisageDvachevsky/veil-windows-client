@@ -33,6 +33,7 @@ class QuickActionsWidgetTest : public ::testing::Test {
     // Clear relevant settings before each test
     QSettings settings("VEIL", "VPN Client");
     settings.remove("quickActions");
+    settings.remove("advanced/obfuscation");
     settings.sync();
 
     widget_ = new QuickActionsWidget();
@@ -43,6 +44,7 @@ class QuickActionsWidgetTest : public ::testing::Test {
     // Clean up settings
     QSettings settings("VEIL", "VPN Client");
     settings.remove("quickActions");
+    settings.remove("advanced/obfuscation");
     settings.sync();
   }
 
