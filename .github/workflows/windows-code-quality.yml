@@ -1,0 +1,281 @@
+name: Windows Code Quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+      - '.clang-tidy'
+      - '.github/workflows/windows-code-quality.yml'
+
+jobs:
+  msvc-analyze:
+    name: MSVC Static Analysis
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Ninja
+        run: choco install ninja -y
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v5
+        with:
+          path: |
+            ${{ github.workspace }}/vcpkg
+            !${{ github.workspace }}/vcpkg/buildtrees
+            !${{ github.workspace }}/vcpkg/packages
+            !${{ github.workspace }}/vcpkg/downloads
+          key: vcpkg-windows-x64-analyze-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-windows-x64-analyze-
+            vcpkg-windows-x64-
+
+      - name: Setup vcpkg
+        run: |
+          if (!(Test-Path vcpkg)) {
+            git clone https://github.com/microsoft/vcpkg.git
+            ./vcpkg/bootstrap-vcpkg.bat
+          }
+
+      - name: Install dependencies via vcpkg
+        run: |
+          ./vcpkg/vcpkg install libsodium:x64-windows
+          ./vcpkg/vcpkg install spdlog:x64-windows
+          ./vcpkg/vcpkg install fmt:x64-windows
+          ./vcpkg/vcpkg install cli11:x64-windows
+          ./vcpkg/vcpkg install nlohmann-json:x64-windows
+          ./vcpkg/vcpkg install gtest:x64-windows
+
+      - name: Configure CMake with MSVC /analyze
+        run: |
+          cmake -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Debug `
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DVEIL_ENABLE_MSVC_ANALYZE=ON `
+            -DVEIL_BUILD_TESTS=ON `
+            -DVEIL_BUILD_GUI=OFF `
+            -DVEIL_BUILD_SERVER=OFF `
+            -DVEIL_BUILD_SERVICE=ON
+
+      - name: Build with MSVC /analyze
+        run: cmake --build build --config Debug 2>&1 | Tee-Object -FilePath msvc-analyze.log
+
+      - name: Check for analysis warnings
+        run: |
+          $warnings = Select-String -Path msvc-analyze.log -Pattern "warning C[0-9]{4}:"
+          if ($warnings) {
+            Write-Host "MSVC /analyze found $($warnings.Count) warnings:"
+            $warnings | Select-Object -First 50 | ForEach-Object { Write-Host $_.Line }
+            if ($warnings.Count -gt 50) {
+              Write-Host "... and $($warnings.Count - 50) more warnings (see full log)"
+            }
+          } else {
+            Write-Host "No MSVC /analyze warnings found"
+          }
+
+      - name: Upload MSVC analysis log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: msvc-analyze-log
+          path: msvc-analyze.log
+          retention-days: 14
+
+  clang-tidy-windows:
+    name: clang-tidy (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install LLVM/Clang
+        run: |
+          choco install llvm -y
+          echo "C:\Program Files\LLVM\bin" >> $env:GITHUB_PATH
+
+      - name: Install Ninja
+        run: choco install ninja -y
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v5
+        with:
+          path: |
+            ${{ github.workspace }}/vcpkg
+            !${{ github.workspace }}/vcpkg/buildtrees
+            !${{ github.workspace }}/vcpkg/packages
+            !${{ github.workspace }}/vcpkg/downloads
+          key: vcpkg-windows-x64-clang-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-windows-x64-clang-
+            vcpkg-windows-x64-
+
+      - name: Setup vcpkg
+        run: |
+          if (!(Test-Path vcpkg)) {
+            git clone https://github.com/microsoft/vcpkg.git
+            ./vcpkg/bootstrap-vcpkg.bat
+          }
+
+      - name: Install dependencies via vcpkg
+        run: |
+          ./vcpkg/vcpkg install libsodium:x64-windows
+          ./vcpkg/vcpkg install spdlog:x64-windows
+          ./vcpkg/vcpkg install fmt:x64-windows
+          ./vcpkg/vcpkg install cli11:x64-windows
+          ./vcpkg/vcpkg install nlohmann-json:x64-windows
+          ./vcpkg/vcpkg install gtest:x64-windows
+
+      - name: Verify clang-tidy installation
+        run: |
+          clang-tidy --version
+          clang --version
+
+      - name: Configure CMake with clang-tidy
+        run: |
+          cmake -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Debug `
+            -DCMAKE_C_COMPILER=clang `
+            -DCMAKE_CXX_COMPILER=clang++ `
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DVEIL_ENABLE_CLANG_TIDY=ON `
+            -DVEIL_ENABLE_MSVC_ANALYZE=OFF `
+            -DVEIL_BUILD_TESTS=ON `
+            -DVEIL_BUILD_GUI=OFF `
+            -DVEIL_BUILD_SERVER=OFF `
+            -DVEIL_BUILD_SERVICE=ON
+
+      - name: Build with clang-tidy
+        run: cmake --build build --config Debug 2>&1 | Tee-Object -FilePath clang-tidy.log
+
+      - name: Check for clang-tidy warnings
+        run: |
+          $warnings = Select-String -Path clang-tidy.log -Pattern "warning:"
+          if ($warnings) {
+            Write-Host "clang-tidy found $($warnings.Count) warnings:"
+            $warnings | Select-Object -First 50 | ForEach-Object { Write-Host $_.Line }
+            if ($warnings.Count -gt 50) {
+              Write-Host "... and $($warnings.Count - 50) more warnings (see full log)"
+            }
+          } else {
+            Write-Host "No clang-tidy warnings found"
+          }
+
+      - name: Upload clang-tidy log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-tidy-windows-log
+          path: clang-tidy.log
+          retention-days: 14
+
+  drmemory:
+    name: Dr.Memory (Windows Memory Analysis)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Ninja
+        run: choco install ninja -y
+
+      - name: Install Dr.Memory
+        run: |
+          $drmemUrl = "https://github.com/DynamoRIO/drmemory/releases/download/release_2.6.0/DrMemory-Windows-2.6.0.zip"
+          $drmemZip = "${{ github.workspace }}/drmemory.zip"
+          Invoke-WebRequest -Uri $drmemUrl -OutFile $drmemZip
+          Expand-Archive -Path $drmemZip -DestinationPath "${{ github.workspace }}/drmemory" -Force
+          echo "${{ github.workspace }}/drmemory/DrMemory-Windows-2.6.0/bin64" >> $env:GITHUB_PATH
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v5
+        with:
+          path: |
+            ${{ github.workspace }}/vcpkg
+            !${{ github.workspace }}/vcpkg/buildtrees
+            !${{ github.workspace }}/vcpkg/packages
+            !${{ github.workspace }}/vcpkg/downloads
+          key: vcpkg-windows-x64-drmem-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-windows-x64-drmem-
+            vcpkg-windows-x64-
+
+      - name: Setup vcpkg
+        run: |
+          if (!(Test-Path vcpkg)) {
+            git clone https://github.com/microsoft/vcpkg.git
+            ./vcpkg/bootstrap-vcpkg.bat
+          }
+
+      - name: Install dependencies via vcpkg
+        run: |
+          ./vcpkg/vcpkg install libsodium:x64-windows
+          ./vcpkg/vcpkg install spdlog:x64-windows
+          ./vcpkg/vcpkg install fmt:x64-windows
+          ./vcpkg/vcpkg install cli11:x64-windows
+          ./vcpkg/vcpkg install nlohmann-json:x64-windows
+          ./vcpkg/vcpkg install gtest:x64-windows
+
+      - name: Configure CMake for Dr.Memory
+        run: |
+          cmake -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Debug `
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DVEIL_ENABLE_MSVC_ANALYZE=OFF `
+            -DVEIL_BUILD_TESTS=ON `
+            -DVEIL_BUILD_GUI=OFF `
+            -DVEIL_BUILD_SERVER=OFF `
+            -DVEIL_BUILD_SERVICE=OFF
+
+      - name: Build
+        run: cmake --build build --config Debug
+
+      - name: Run unit tests with Dr.Memory
+        run: |
+          New-Item -ItemType Directory -Force -Path drmemory-logs
+
+          # Run unit tests under Dr.Memory
+          & "${{ github.workspace }}/drmemory/DrMemory-Windows-2.6.0/bin64/drmemory.exe" `
+            -batch `
+            -logdir drmemory-logs `
+            -- build/tests/unit/Debug/veil_unit_tests.exe `
+            --gtest_filter="-*Integration*:*Network*"
+        continue-on-error: true
+
+      - name: Check Dr.Memory results
+        run: |
+          $results = Get-ChildItem -Path drmemory-logs -Filter "results.txt" -Recurse
+          if ($results) {
+            Write-Host "Dr.Memory Results:"
+            Get-Content $results[0].FullName
+          } else {
+            Write-Host "No Dr.Memory results found"
+          }
+
+      - name: Upload Dr.Memory logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drmemory-logs
+          path: drmemory-logs/
+          retention-days: 14
