@@ -204,9 +204,9 @@ std::optional<std::vector<mux::MuxFrame>> TransportSession::decrypt_packet(
   auto frame = mux::MuxCodec::decode(*decrypted);
   if (frame) {
     // Log frame details for debugging (Issue #72)
-    LOG_WARN("  Frame decoded: kind={}, payload_size={}",
-             static_cast<int>(frame->kind),
-             frame->kind == mux::FrameKind::kData ? frame->data.payload.size() : 0);
+    LOG_DEBUG("  Frame decoded: kind={}, payload_size={}",
+              static_cast<int>(frame->kind),
+              frame->kind == mux::FrameKind::kData ? frame->data.payload.size() : 0);
 
     if (frame->kind == mux::FrameKind::kData) {
       ++stats_.fragments_received;
@@ -241,8 +241,8 @@ std::optional<std::vector<mux::MuxFrame>> TransportSession::decrypt_packet(
             .data = std::move(frame->data.payload),
             .last = frame->data.fin};
 
-        LOG_WARN("  Fragment: msg_id={}, frag_idx={}, offset={}, size={}, last={}",
-                 msg_id, frag_idx, frag.offset, frag.data.size(), frag.last);
+        LOG_DEBUG("  Fragment: msg_id={}, frag_idx={}, offset={}, size={}, last={}",
+                  msg_id, frag_idx, frag.offset, frag.data.size(), frag.last);
 
         fragment_reassembly_.push(reassembly_id, std::move(frag), now_fn_());
 
@@ -250,7 +250,7 @@ std::optional<std::vector<mux::MuxFrame>> TransportSession::decrypt_packet(
         auto reassembled = fragment_reassembly_.try_reassemble(reassembly_id);
         if (reassembled) {
           // Successfully reassembled - create a new data frame with complete payload
-          LOG_WARN("  Reassembled complete message: msg_id={}, size={}", msg_id, reassembled->size());
+          LOG_DEBUG("  Reassembled complete message: msg_id={}, size={}", msg_id, reassembled->size());
           ++stats_.messages_reassembled;
 
           mux::MuxFrame complete_frame{};
@@ -264,7 +264,7 @@ std::optional<std::vector<mux::MuxFrame>> TransportSession::decrypt_packet(
         // If not yet complete, don't add to frames - wait for more fragments
       } else {
         // Complete non-fragmented message - return directly
-        LOG_WARN("  Complete message: sequence={}, size={}", frame_seq, frame->data.payload.size());
+        LOG_DEBUG("  Complete message: sequence={}, size={}", frame_seq, frame->data.payload.size());
         frames.push_back(std::move(*frame));
       }
     } else {
@@ -273,8 +273,8 @@ std::optional<std::vector<mux::MuxFrame>> TransportSession::decrypt_packet(
     }
   } else {
     // Log frame decode failure for debugging (Issue #72)
-    LOG_WARN("  Frame decode FAILED: decrypted_size={}, first_byte={:#04x}",
-             decrypted->size(), decrypted->empty() ? 0 : (*decrypted)[0]);
+    LOG_DEBUG("  Frame decode FAILED: decrypted_size={}, first_byte={:#04x}",
+              decrypted->size(), decrypted->empty() ? 0 : (*decrypted)[0]);
   }
 
   if (sequence > recv_sequence_max_) {
