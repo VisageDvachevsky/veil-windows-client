@@ -589,6 +589,7 @@ void cleanup_firewall_rule() {
 // ============================================================================
 
 void handle_ipc_message(const ipc::Message& msg, int client_fd) {
+#ifndef NDEBUG
   LOG_DEBUG("========================================");
   LOG_DEBUG("IPC MESSAGE RECEIVED");
   LOG_DEBUG("========================================");
@@ -596,6 +597,7 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
   if (msg.id) {
     LOG_DEBUG("Message ID: {}", *msg.id);
   }
+#endif
 
   if (!std::holds_alternative<ipc::Command>(msg.payload)) {
     LOG_WARN("Received non-command message from client");
@@ -606,7 +608,9 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
   }
 
   const auto& cmd = std::get<ipc::Command>(msg.payload);
+#ifndef NDEBUG
   LOG_DEBUG("Successfully extracted Command from payload");
+#endif
 
   ipc::Message response_msg;
   response_msg.type = ipc::MessageType::kResponse;
@@ -619,6 +623,7 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
         using T = std::decay_t<decltype(command)>;
 
         if constexpr (std::is_same_v<T, ipc::ConnectCommand>) {
+#ifndef NDEBUG
           LOG_DEBUG("========================================");
           LOG_DEBUG("PROCESSING CONNECT COMMAND");
           LOG_DEBUG("========================================");
@@ -632,6 +637,7 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
           LOG_DEBUG("Enable obfuscation: {}", command.config.enable_obfuscation);
           LOG_DEBUG("Auto reconnect: {}", command.config.auto_reconnect);
           LOG_DEBUG("Route all traffic: {}", command.config.route_all_traffic);
+#endif
 
           if (g_connected) {
             LOG_WARN("Already connected - rejecting connection request");
@@ -669,6 +675,7 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
 
             // Log configuration for debugging
             LOG_INFO("Connecting to {}:{}", g_tunnel_config.server_address, g_tunnel_config.server_port);
+#ifndef NDEBUG
             if (!g_tunnel_config.key_file.empty()) {
               LOG_DEBUG("Using pre-shared key file: {}", g_tunnel_config.key_file);
             } else {
@@ -680,6 +687,11 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
 
             // Create and initialize tunnel
             LOG_DEBUG("Creating tunnel instance with configuration...");
+#else
+            if (g_tunnel_config.key_file.empty()) {
+              LOG_WARN("No pre-shared key file specified - handshake will fail!");
+            }
+#endif
             g_tunnel = std::make_unique<tunnel::Tunnel>(g_tunnel_config);
 
             // Set up state change callback to configure routes when connected
@@ -692,7 +704,9 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
               }
             });
 
+#ifndef NDEBUG
             LOG_DEBUG("Initializing tunnel...");
+#endif
             std::error_code ec;
             if (!g_tunnel->initialize(ec)) {
               LOG_ERROR("========================================");
@@ -717,7 +731,9 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
                 LOG_WARN("Could not determine actual UDP port, skipping firewall rule");
               }
 
+#ifndef NDEBUG
               LOG_DEBUG("Starting tunnel thread...");
+#endif
 
               // Start tunnel in background thread
               // Note: Lambda captures nothing by value/reference because all variables
@@ -761,11 +777,15 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
               LOG_INFO("========================================");
               LOG_INFO("VPN CONNECTION ESTABLISHED");
               LOG_INFO("========================================");
+#ifndef NDEBUG
               LOG_DEBUG("Setting response to SuccessResponse");
+#endif
               response = ipc::SuccessResponse{"Connected successfully"};
 
               // Broadcast connection event
+#ifndef NDEBUG
               LOG_DEBUG("Broadcasting connection state change event...");
+#endif
               ipc::ConnectionStateChangeEvent event;
               event.old_state = ipc::ConnectionState::kDisconnected;
               event.new_state = ipc::ConnectionState::kConnected;
@@ -780,11 +800,15 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
                   g_ipc_server->broadcast_message(event_msg);
                 }
               }
+#ifndef NDEBUG
               LOG_DEBUG("Connection state change event broadcasted");
+#endif
             }
           }
         } else if constexpr (std::is_same_v<T, ipc::DisconnectCommand>) {
+#ifndef NDEBUG
           LOG_DEBUG("Received DisconnectCommand");
+#endif
           if (g_connected && g_tunnel) {
             LOG_INFO("Stopping VPN tunnel...");
 
@@ -821,7 +845,9 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
             response = ipc::ErrorResponse{"Not connected", ""};
           }
         } else if constexpr (std::is_same_v<T, ipc::GetStatusCommand>) {
+#ifndef NDEBUG
           LOG_DEBUG("Received GetStatusCommand");
+#endif
           ipc::StatusResponse status_resp;
           status_resp.status.state = g_connected
                                          ? ipc::ConnectionState::kConnected
@@ -836,7 +862,9 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
           }
           response = status_resp;
         } else if constexpr (std::is_same_v<T, ipc::GetMetricsCommand>) {
+#ifndef NDEBUG
           LOG_DEBUG("Received GetMetricsCommand");
+#endif
           ipc::MetricsResponse metrics_resp;
           if (g_tunnel) {
             const auto& stats = g_tunnel->stats();
@@ -848,7 +876,9 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
           }
           response = metrics_resp;
         } else if constexpr (std::is_same_v<T, ipc::GetDiagnosticsCommand>) {
+#ifndef NDEBUG
           LOG_DEBUG("Received GetDiagnosticsCommand");
+#endif
           ipc::DiagnosticsResponse diag_resp;
           if (g_tunnel) {
             const auto& stats = g_tunnel->stats();
@@ -860,7 +890,9 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
           }
           response = diag_resp;
         } else if constexpr (std::is_same_v<T, ipc::UpdateConfigCommand>) {
+#ifndef NDEBUG
           LOG_DEBUG("Received UpdateConfigCommand");
+#endif
           // Store config for next connection
           g_tunnel_config.server_address = command.config.server_address;
           g_tunnel_config.server_port = command.config.server_port;
@@ -887,11 +919,15 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
           }
           response = ipc::SuccessResponse{"Configuration updated"};
         } else if constexpr (std::is_same_v<T, ipc::ExportDiagnosticsCommand>) {
+#ifndef NDEBUG
           LOG_DEBUG("Received ExportDiagnosticsCommand");
+#endif
           response = ipc::ErrorResponse{
               "Export diagnostics not yet implemented on Windows", ""};
         } else if constexpr (std::is_same_v<T, ipc::GetClientListCommand>) {
+#ifndef NDEBUG
           LOG_DEBUG("Received GetClientListCommand");
+#endif
           ipc::ClientListResponse list_resp;
           // Empty client list - we're not a server
           response = list_resp;
@@ -906,6 +942,7 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
       cmd);
 
   // Log response details before sending
+#ifndef NDEBUG
   LOG_DEBUG("========================================");
   LOG_DEBUG("SENDING IPC RESPONSE");
   LOG_DEBUG("========================================");
@@ -943,15 +980,19 @@ void handle_ipc_message(const ipc::Message& msg, int client_fd) {
       LOG_WARN("Response type: UNKNOWN!");
     }
   }
+#endif
 
   std::error_code ec;
   {
     std::lock_guard<std::mutex> lock(g_ipc_server_mutex);
     if (g_ipc_server && !g_ipc_server->send_message(client_fd, response_msg, ec)) {
       LOG_ERROR("Failed to send IPC response: {}", ec.message());
-    } else if (g_ipc_server) {
+    }
+#ifndef NDEBUG
+    else if (g_ipc_server) {
       LOG_DEBUG("IPC response sent successfully");
     }
+#endif
   }
   LOG_DEBUG("========================================");
 }
