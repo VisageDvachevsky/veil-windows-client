@@ -361,7 +361,7 @@ TEST_F(ConnectionWidgetTest, UpdateMetricsRapidly) {
 TEST_F(ConnectionWidgetTest, SessionInfoUpdatesRapidly) {
   for (int i = 0; i < 50; ++i) {
     widget_->setSessionId(QString("session-%1").arg(i));
-    widget_->setServerAddress(QString("server-%1.example.com").arg(i), 4433 + i);
+    widget_->setServerAddress(QString("server-%1.example.com").arg(i), static_cast<uint16_t>(4433 + i));
   }
 }
 
