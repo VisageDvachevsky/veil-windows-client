@@ -23,6 +23,8 @@
 
 namespace veil::gui {
 
+// NOLINTBEGIN(readability-implicit-bool-conversion)
+
 SettingsWidget::SettingsWidget(QWidget* parent) : QWidget(parent) {
   // Initialize validation debounce timer
   validationDebounceTimer_ = new QTimer(this);
@@ -1116,7 +1118,7 @@ void SettingsWidget::onBrowseObfuscationSeed() {
   }
 }
 
-void SettingsWidget::onLaunchOnStartupChanged(int state) {
+void SettingsWidget::onLaunchOnStartupChanged([[maybe_unused]] int state) {
 #ifdef _WIN32
   // Update Windows registry to add/remove application from startup
   QSettings registrySettings(
@@ -1696,5 +1698,7 @@ void SettingsWidget::onAdvancedModeToggled(bool showAdvanced) {
   dpiBypassSection_->setVisible(showAdvanced);
   advancedSection_->setVisible(showAdvanced);
 }
+
+// NOLINTEND(readability-implicit-bool-conversion)
 
 }  // namespace veil::gui

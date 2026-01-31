@@ -7,8 +7,10 @@
 
 namespace veil::gui {
 
+// NOLINTBEGIN(readability-implicit-bool-conversion)
+
 CollapsibleSection::CollapsibleSection(const QString& title, QWidget* parent)
-    : QWidget(parent), collapsed_(false), expandedHeight_(0) {
+    : QWidget(parent) {
   setupUi();
   setTitle(title);
 }
@@ -177,5 +179,7 @@ void CollapsibleSection::setContentHeight(int height) {
     }
   }
 }
+
+// NOLINTEND(readability-implicit-bool-conversion)
 
 }  // namespace veil::gui
