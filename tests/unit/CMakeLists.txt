@@ -15,6 +15,7 @@ if(WIN32)
     console_handler_tests.cpp
     service_manager_tests.cpp
     app_enumerator_tests.cpp
+    shortcut_manager_tests.cpp
   )
 else()
   set(VEIL_PLATFORM_TEST_SOURCES
@@ -88,8 +89,11 @@ if(Qt6_FOUND)
     ${CMAKE_SOURCE_DIR}/src/gui-client/setup_wizard.cpp
     ${CMAKE_SOURCE_DIR}/src/gui-client/setup_wizard.h
     statistics_widget_tests.cpp
+    quick_actions_widget_tests.cpp
     ${CMAKE_SOURCE_DIR}/src/gui-client/statistics_widget.cpp
     ${CMAKE_SOURCE_DIR}/src/gui-client/statistics_widget.h
+    ${CMAKE_SOURCE_DIR}/src/gui-client/quick_actions_widget.cpp
+    ${CMAKE_SOURCE_DIR}/src/gui-client/quick_actions_widget.h
   )
 
   target_include_directories(veil_gui_tests PRIVATE

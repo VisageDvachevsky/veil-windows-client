@@ -1,6 +1,6 @@
 # VEIL Client GUI Application (Qt/C++)
 
-find_package(Qt6 COMPONENTS Core Widgets Network Svg QUIET)
+find_package(Qt6 COMPONENTS Core Widgets Network Svg LinguistTools QUIET)
 
 if(NOT Qt6_FOUND)
   message(STATUS "Qt6 not found, client GUI will not be built")
@@ -11,6 +11,13 @@ endif()
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
+
+# Translation files
+set(TS_FILES
+  translations/veil_en.ts
+  translations/veil_ru.ts
+  translations/veil_zh.ts
+)
 
 add_executable(veil-client-gui
   main.cpp
@@ -42,6 +49,8 @@ add_executable(veil-client-gui
   server_list_widget.h
   server_selector_widget.cpp
   server_selector_widget.h
+  quick_actions_widget.cpp
+  quick_actions_widget.h
   app_split_tunnel_widget.cpp
   app_split_tunnel_widget.h
   usage_tracker.cpp
@@ -50,6 +59,14 @@ add_executable(veil-client-gui
   data_usage_widget.h
   resources/resources.qrc
 )
+
+# Generate .qm files from .ts files (must be after add_executable)
+if(Qt6LinguistTools_FOUND)
+  qt_add_translations(veil-client-gui
+    TS_FILES ${TS_FILES}
+    QM_FILES_OUTPUT_VARIABLE QM_FILES
+  )
+endif()
 
 target_link_libraries(veil-client-gui
   PRIVATE
@@ -65,3 +82,10 @@ veil_set_warnings(veil-client-gui)
 install(TARGETS veil-client-gui
   RUNTIME DESTINATION bin
 )
+
+# Install translation files
+if(Qt6LinguistTools_FOUND AND QM_FILES)
+  install(FILES ${QM_FILES}
+    DESTINATION bin/translations
+  )
+endif()
