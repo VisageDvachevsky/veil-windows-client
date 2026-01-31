@@ -217,7 +217,7 @@ void AppSplitTunnelWidget::setupUi() {
   auto* customLayout = new QHBoxLayout(customGroup);
 
   customPathEdit_ = new QLineEdit(this);
-  customPathEdit_->setPlaceholderText("C:\\Path\\to\\application.exe");
+  customPathEdit_->setPlaceholderText(R"(C:\Path\to\application.exe)");
   customLayout->addWidget(customPathEdit_, 1);
 
   browseCustomButton_ = new QPushButton("Browse...", this);

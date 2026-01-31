@@ -1141,6 +1141,7 @@ void SettingsWidget::onLaunchOnStartupChanged(int state) {
   registrySettings.sync();
   hasUnsavedChanges_ = true;
 #else
+  (void)state;  // Used only on Windows
   // Not Windows - disable checkbox
   launchOnWindowsStartupCheck_->setChecked(false);
   launchOnWindowsStartupCheck_->setEnabled(false);
