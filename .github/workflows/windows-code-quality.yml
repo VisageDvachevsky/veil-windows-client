@@ -36,10 +36,9 @@ jobs:
             !${{ github.workspace }}/vcpkg/buildtrees
             !${{ github.workspace }}/vcpkg/packages
             !${{ github.workspace }}/vcpkg/downloads
-          key: vcpkg-windows-x64-analyze-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-windows-x64-analyze-v2-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            vcpkg-windows-x64-analyze-
-            vcpkg-windows-x64-
+            vcpkg-windows-x64-analyze-v2-
 
       - name: Setup vcpkg
         run: |
@@ -116,10 +115,9 @@ jobs:
             !${{ github.workspace }}/vcpkg/buildtrees
             !${{ github.workspace }}/vcpkg/packages
             !${{ github.workspace }}/vcpkg/downloads
-          key: vcpkg-windows-x64-clang-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-windows-x64-clang-v2-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            vcpkg-windows-x64-clang-
-            vcpkg-windows-x64-
+            vcpkg-windows-x64-clang-v2-
 
       - name: Setup vcpkg
         run: |
@@ -213,10 +211,9 @@ jobs:
             !${{ github.workspace }}/vcpkg/buildtrees
             !${{ github.workspace }}/vcpkg/packages
             !${{ github.workspace }}/vcpkg/downloads
-          key: vcpkg-windows-x64-drmem-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-windows-x64-drmem-v2-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            vcpkg-windows-x64-drmem-
-            vcpkg-windows-x64-
+            vcpkg-windows-x64-drmem-v2-
 
       - name: Setup vcpkg
         run: |
