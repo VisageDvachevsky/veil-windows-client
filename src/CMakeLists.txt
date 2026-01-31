@@ -137,6 +137,17 @@ if(WIN32)
   # Enable IPC debug logging on Windows for easier troubleshooting
   target_compile_definitions(veil_common PUBLIC VEIL_IPC_DEBUG)
   message(STATUS "IPC debug logging enabled for Windows builds")
+else()
+  # Linux: libcurl is used by auto_updater for HTTP requests
+  find_package(CURL QUIET)
+  if(CURL_FOUND)
+    target_link_libraries(veil_common PUBLIC CURL::libcurl)
+  else()
+    find_library(CURL_LIBRARY NAMES curl)
+    if(CURL_LIBRARY)
+      target_link_libraries(veil_common PUBLIC ${CURL_LIBRARY})
+    endif()
+  endif()
 endif()
 
 veil_set_warnings(veil_common)
