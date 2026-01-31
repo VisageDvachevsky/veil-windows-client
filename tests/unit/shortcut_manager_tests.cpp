@@ -84,12 +84,12 @@ TEST_F(ShortcutManagerTests, CreateBasicShortcut) {
       ShortcutManager::Location::kDesktop,  // We'll override the path below
       test_shortcut_name_,
       target_path,
+      error,
       "",  // arguments
       "Test shortcut for VEIL unit tests",
       "",  // icon_path
       0,   // icon_index
-      "",  // working_dir
-      error
+      ""   // working_dir
   );
 
   // Note: This test will create the shortcut on the actual Desktop
@@ -127,12 +127,12 @@ TEST_F(ShortcutManagerTests, ShortcutExists) {
       ShortcutManager::Location::kDesktop,
       test_shortcut_name_,
       target_path,
+      error,
       "",
       "Test shortcut",
       "",
       0,
-      "",
-      error
+      ""
   );
 
   if (created) {
@@ -171,12 +171,12 @@ TEST_F(ShortcutManagerTests, RemoveShortcut) {
       ShortcutManager::Location::kDesktop,
       test_shortcut_name_,
       target_path,
+      error,
       "",
       "Test shortcut",
       "",
       0,
-      "",
-      error
+      ""
   );
 
   if (created) {

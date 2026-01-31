@@ -25,22 +25,22 @@ class ShortcutManager {
   // location: Where to create the shortcut
   // shortcut_name: Name of the shortcut (without .lnk extension)
   // target_path: Full path to the executable
+  // error: Output parameter for error message
   // arguments: Optional command-line arguments
   // description: Optional shortcut description/tooltip
   // icon_path: Optional path to icon file (uses target_path if empty)
   // icon_index: Icon index within the icon file
   // working_dir: Optional working directory (uses target directory if empty)
-  // error: Output parameter for error message
   // Returns true on success
   static bool createShortcut(Location location,
                             const std::string& shortcut_name,
                             const std::string& target_path,
+                            std::string& error,
                             const std::string& arguments = "",
                             const std::string& description = "",
                             const std::string& icon_path = "",
                             int icon_index = 0,
-                            const std::string& working_dir = "",
-                            std::string& error);
+                            const std::string& working_dir = "");
 
   // Remove a shortcut
   // location: Where the shortcut is located

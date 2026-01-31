@@ -50,12 +50,12 @@ int main() {
       ShortcutManager::Location::kDesktop,
       test_shortcut_name,
       target_path,
+      error,
       "",  // arguments
       "Test shortcut created by VEIL experiment",
       "",  // icon_path (use executable's icon)
       0,   // icon_index
-      "",  // working_dir
-      error
+      ""   // working_dir
   );
 
   if (!success) {
@@ -88,12 +88,12 @@ int main() {
       ShortcutManager::Location::kStartMenu,
       test_shortcut_name,
       target_path,
+      error,
       test_file_path,  // arguments - open test.txt
       "Test shortcut with arguments",
       "",  // icon_path
       0,   // icon_index
-      "",  // working_dir
-      error
+      ""   // working_dir
   );
 
   if (!success) {
@@ -167,12 +167,12 @@ int main() {
       ShortcutManager::Location::kDesktop,
       "VEIL VPN",
       veil_exe_path,
+      error,
       "",
       "VEIL VPN Client - Secure VPN Connection",
       "",
       0,
-      "",
-      error
+      ""
   );
 
   if (!success) {

@@ -49,12 +49,12 @@ std::string toNarrowString(const std::wstring& wide_str) {
 bool ShortcutManager::createShortcut(Location location,
                                     const std::string& shortcut_name,
                                     const std::string& target_path,
+                                    std::string& error,
                                     const std::string& arguments,
                                     const std::string& description,
                                     const std::string& icon_path,
                                     int icon_index,
-                                    const std::string& working_dir,
-                                    std::string& error) {
+                                    const std::string& working_dir) {
   // Get the shortcut file path
   std::string shortcut_path = getShortcutPath(location, shortcut_name, error);
   if (shortcut_path.empty()) {

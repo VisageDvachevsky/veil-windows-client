@@ -586,12 +586,12 @@ void SetupWizard::onFinishClicked() {
         veil::windows::ShortcutManager::Location::kDesktop,
         "VEIL VPN",
         launcherPath.toStdString(),
+        error,
         "",
         "VEIL VPN Client - Secure VPN Connection",
         "",
         0,
-        "",
-        error
+        ""
     );
 
     if (success) {
@@ -616,12 +616,12 @@ void SetupWizard::onFinishClicked() {
         veil::windows::ShortcutManager::Location::kStartMenu,
         "VEIL VPN",
         launcherPath.toStdString(),
+        error,
         "",
         "VEIL VPN Client - Secure VPN Connection",
         "",
         0,
-        "",
-        error
+        ""
     );
 
     if (success) {

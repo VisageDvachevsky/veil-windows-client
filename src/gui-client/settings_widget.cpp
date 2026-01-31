@@ -1140,12 +1140,12 @@ void SettingsWidget::onCreateDesktopShortcut() {
       veil::windows::ShortcutManager::Location::kDesktop,
       "VEIL VPN",
       launcherPath.toStdString(),
+      error,
       "",  // arguments
       "VEIL VPN Client - Secure VPN Connection",
       "",  // icon_path (use executable's icon)
       0,   // icon_index
-      "",  // working_dir (use executable's directory)
-      error
+      ""   // working_dir (use executable's directory)
   );
 
   if (success) {
@@ -1191,12 +1191,12 @@ void SettingsWidget::onCreateStartMenuShortcut() {
       veil::windows::ShortcutManager::Location::kStartMenu,
       "VEIL VPN",
       launcherPath.toStdString(),
+      error,
       "",  // arguments
       "VEIL VPN Client - Secure VPN Connection",
       "",  // icon_path (use executable's icon)
       0,   // icon_index
-      "",  // working_dir (use executable's directory)
-      error
+      ""   // working_dir (use executable's directory)
   );
 
   if (success) {
