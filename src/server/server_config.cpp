@@ -176,7 +176,7 @@ bool parse_args(int argc, char* argv[], ServerConfig& config, std::error_code& e
       ->default_val(true);
 
   // Session management.
-  app.add_option("--max-clients", config.max_clients, "Maximum number of clients")->default_val(256);
+  app.add_option("--max-clients", config.max_clients, "Maximum number of clients")->default_val(253);
   int session_timeout_seconds = 300;
   app.add_option("--session-timeout", session_timeout_seconds, "Session timeout in seconds")
       ->default_val(300);

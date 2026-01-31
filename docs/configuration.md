@@ -69,7 +69,7 @@ Session management settings.
 
 | Parameter | Type | Default | Range | Description |
 |-----------|------|---------|-------|-------------|
-| `max_clients` | int | `256` | 1-65535 | Maximum concurrent clients |
+| `max_clients` | int | `253` | 1-65535 | Maximum concurrent clients |
 | `session_timeout` | int | `300` | 60-86400 | Idle timeout (seconds) |
 | `idle_warning_sec` | int | `270` | - | Warning before idle timeout |
 | `absolute_timeout_sec` | int | `86400` | 3600-604800 | Max session lifetime |
@@ -203,7 +203,7 @@ enable_forwarding = true
 use_masquerade = true
 
 [sessions]
-max_clients = 256
+max_clients = 253
 session_timeout = 300
 idle_warning_sec = 270
 absolute_timeout_sec = 86400
@@ -290,7 +290,7 @@ Configuration values can also be set via environment variables:
 
 ```bash
 VEIL_LISTEN_PORT=4433
-VEIL_MAX_CLIENTS=256
+VEIL_MAX_CLIENTS=253
 VEIL_LOG_LEVEL=info
 ```
 

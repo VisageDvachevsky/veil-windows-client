@@ -134,7 +134,7 @@ enable_forwarding = true
 use_masquerade = true
 
 [sessions]
-max_clients = 256
+max_clients = 253
 session_timeout = 300
 
 [ip_pool]
@@ -555,7 +555,7 @@ absolute_timeout_sec = 86400   # Max 24 hours
 Prevent resource exhaustion:
 ```ini
 [sessions]
-max_clients = 256
+max_clients = 253
 max_memory_per_session_mb = 10
 
 [degradation]
