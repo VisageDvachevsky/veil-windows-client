@@ -188,7 +188,7 @@ QString UsageBarChart::formatBytes(uint64_t bytes) const {
   } else if (bytes >= 1024ULL) {
     return QString("%1 KB").arg(static_cast<double>(bytes) / 1024.0, 0, 'f', 1);
   }
-  return QString("%1 B").arg(bytes);
+  return QString::number(bytes) + " B";
 }
 
 // ===================== DataUsageWidget Implementation =====================
@@ -755,13 +755,12 @@ void DataUsageWidget::onExportClicked() {
     QString csv;
     csv += "Date,Upload (bytes),Download (bytes),Total (bytes),Sessions,Duration (s)\n";
     for (const auto& rec : records) {
-      csv += QString("%1,%2,%3,%4,%5,%6\n")
-                 .arg(rec.date.toString(Qt::ISODate))
-                 .arg(rec.txBytes)
-                 .arg(rec.rxBytes)
-                 .arg(rec.totalBytes())
-                 .arg(rec.sessionCount)
-                 .arg(rec.totalDurationSec);
+      csv += rec.date.toString(Qt::ISODate) + ","
+             + QString::number(rec.txBytes) + ","
+             + QString::number(rec.rxBytes) + ","
+             + QString::number(rec.totalBytes()) + ","
+             + QString::number(rec.sessionCount) + ","
+             + QString::number(rec.totalDurationSec) + "\n";
     }
 
     QFile file(fileName);
@@ -835,23 +834,23 @@ QString DataUsageWidget::formatBytes(uint64_t bytes) const {
   } else if (bytes >= 1024ULL) {
     return QString("%1 KB").arg(static_cast<double>(bytes) / 1024.0, 0, 'f', 1);
   }
-  return QString("%1 B").arg(bytes);
+  return QString::number(bytes) + " B";
 }
 
 QString DataUsageWidget::formatDuration(uint64_t seconds) const {
   if (seconds < 60) {
-    return QString("%1s").arg(seconds);
+    return QString::number(seconds) + "s";
   } else if (seconds < 3600) {
-    return QString("%1m %2s").arg(seconds / 60).arg(seconds % 60);
+    return QString::number(seconds / 60) + "m " + QString::number(seconds % 60) + "s";
   }
   uint64_t hours = seconds / 3600;
   uint64_t mins = (seconds % 3600) / 60;
   if (hours < 24) {
-    return QString("%1h %2m").arg(hours).arg(mins);
+    return QString::number(hours) + "h " + QString::number(mins) + "m";
   }
   uint64_t days = hours / 24;
   hours = hours % 24;
-  return QString("%1d %2h").arg(days).arg(hours);
+  return QString::number(days) + "d " + QString::number(hours) + "h";
 }
 
 }  // namespace veil::gui
