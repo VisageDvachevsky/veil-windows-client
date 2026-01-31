@@ -9,19 +9,12 @@
 #include <QElapsedTimer>
 
 #include "common/gui/error_message.h"
+#include "connection_state.h"
 
 namespace veil::gui {
 
+class QuickActionsWidget;
 class ServerSelectorWidget;
-
-/// Connection states as defined in the UI design spec
-enum class ConnectionState {
-  kDisconnected,
-  kConnecting,
-  kConnected,
-  kReconnecting,
-  kError
-};
 
 /// Widget for displaying connection status and controls
 class ConnectionWidget : public QWidget {
@@ -35,6 +28,7 @@ class ConnectionWidget : public QWidget {
   void serversRequested();
   void connectRequested();
   void disconnectRequested();
+  void diagnosticsRequested();
 
  public slots:
   /// Update connection state from IPC manager
@@ -97,6 +91,7 @@ class ConnectionWidget : public QWidget {
   // Navigation
   QPushButton* settingsButton_;
   ServerSelectorWidget* serverSelector_;
+  QuickActionsWidget* quickActionsWidget_;
 
   // State
   ConnectionState state_{ConnectionState::kDisconnected};
