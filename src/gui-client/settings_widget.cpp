@@ -1116,7 +1116,7 @@ void SettingsWidget::onBrowseObfuscationSeed() {
   }
 }
 
-void SettingsWidget::onLaunchOnStartupChanged(int state) {
+void SettingsWidget::onLaunchOnStartupChanged([[maybe_unused]] int state) {
 #ifdef _WIN32
   // Update Windows registry to add/remove application from startup
   QSettings registrySettings(

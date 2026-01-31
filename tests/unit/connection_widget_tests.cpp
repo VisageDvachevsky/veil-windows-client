@@ -113,7 +113,7 @@ TEST_F(ConnectionWidgetTest, StateTransitionToError) {
 
 TEST_F(ConnectionWidgetTest, UpdateMetricsBasic) {
   widget_->setConnectionState(ConnectionState::kConnected);
-  widget_->updateMetrics(50, static_cast<uint64_t>(1024) * 100, static_cast<uint64_t>(1024) * 50);  // 50ms, 100KB/s, 50KB/s
+  widget_->updateMetrics(50, 1024ULL * 100, 1024ULL * 50);  // 50ms, 100KB/s, 50KB/s
   // Should not crash
 }
 
@@ -203,34 +203,32 @@ TEST_F(ConnectionWidgetTest, SetErrorMessageLong) {
 
 TEST_F(ConnectionWidgetTest, SetStructuredError) {
   widget_->setConnectionState(ConnectionState::kError);
-  ErrorMessage error(
-      ErrorCategory::kNetwork,
-      "Connection Failed",
-      "Unable to establish secure connection",
-      "Check your network settings");
+  ErrorMessage error;
+  error.title = "Connection Failed";
+  error.description = "Unable to establish secure connection";
+  error.category = ErrorCategory::kNetwork;
   widget_->setError(error);
   // Should display structured error
 }
 
 TEST_F(ConnectionWidgetTest, SetErrorWithDetails) {
   widget_->setConnectionState(ConnectionState::kError);
-  ErrorMessage error(
-      ErrorCategory::kPermission,
-      "Authentication Failed",
-      "Invalid credentials",
-      "Re-enter your credentials",
-      "Server returned 401 Unauthorized");
+  ErrorMessage error;
+  error.title = "Authentication Failed";
+  error.description = "Invalid credentials";
+  error.technical_details = "Server returned 401 Unauthorized";
+  error.category = ErrorCategory::kConfiguration;
   widget_->setError(error);
   // Should display error with technical details
 }
 
 TEST_F(ConnectionWidgetTest, SetErrorWithAction) {
   widget_->setConnectionState(ConnectionState::kError);
-  ErrorMessage error(
-      ErrorCategory::kNetwork,
-      "Network Unreachable",
-      "Cannot reach VPN server",
-      "Check your internet connection");
+  ErrorMessage error;
+  error.title = "Network Unreachable";
+  error.description = "Cannot reach VPN server";
+  error.action = "Check your internet connection";
+  error.category = ErrorCategory::kNetwork;
   widget_->setError(error);
   // Should display error with action text
 }
