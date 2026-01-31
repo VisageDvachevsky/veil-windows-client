@@ -354,14 +354,14 @@ TEST_F(ConnectionWidgetTest, RapidStateChanges) {
 TEST_F(ConnectionWidgetTest, UpdateMetricsRapidly) {
   widget_->setConnectionState(ConnectionState::kConnected);
   for (int i = 0; i < 100; ++i) {
-    widget_->updateMetrics(i % 100, i * 1024, i * 512);
+    widget_->updateMetrics(i % 100, static_cast<uint64_t>(i) * 1024, static_cast<uint64_t>(i) * 512);
   }
 }
 
 TEST_F(ConnectionWidgetTest, SessionInfoUpdatesRapidly) {
   for (int i = 0; i < 50; ++i) {
     widget_->setSessionId(QString("session-%1").arg(i));
-    widget_->setServerAddress(QString("server-%1.example.com").arg(i), 4433 + i);
+    widget_->setServerAddress(QString("server-%1.example.com").arg(i), static_cast<uint16_t>(4433 + i));
   }
 }
 
