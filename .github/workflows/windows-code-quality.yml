@@ -55,7 +55,6 @@ jobs:
           ./vcpkg/vcpkg install fmt:x64-windows
           ./vcpkg/vcpkg install cli11:x64-windows
           ./vcpkg/vcpkg install nlohmann-json:x64-windows
-          ./vcpkg/vcpkg install gtest:x64-windows
 
       - name: Configure CMake with MSVC /analyze
         run: |
@@ -136,7 +135,6 @@ jobs:
           ./vcpkg/vcpkg install fmt:x64-windows
           ./vcpkg/vcpkg install cli11:x64-windows
           ./vcpkg/vcpkg install nlohmann-json:x64-windows
-          ./vcpkg/vcpkg install gtest:x64-windows
 
       - name: Verify clang-tidy installation
         run: |
@@ -234,7 +232,6 @@ jobs:
           ./vcpkg/vcpkg install fmt:x64-windows
           ./vcpkg/vcpkg install cli11:x64-windows
           ./vcpkg/vcpkg install nlohmann-json:x64-windows
-          ./vcpkg/vcpkg install gtest:x64-windows
 
       - name: Configure CMake for Dr.Memory
         run: |
