@@ -630,7 +630,8 @@ void AutoUpdater::download_update(const ReleaseInfo& release,
 }
 
 bool AutoUpdater::install_update(
-    [[maybe_unused]] const std::string& installer_path, std::string& error) {
+    [[maybe_unused]] const std::string& installer_path,
+    std::string& error) {
 #ifdef _WIN32
   // Use ShellExecute to run the installer with elevation
   SHELLEXECUTEINFOA sei = {};
