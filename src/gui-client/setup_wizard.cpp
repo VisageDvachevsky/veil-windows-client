@@ -572,7 +572,7 @@ void SetupWizard::onFinishClicked() {
 
 #ifdef _WIN32
   // Create shortcuts if requested
-  if (createDesktopShortcutCheck_ && createDesktopShortcutCheck_->isChecked()) {
+  if (createDesktopShortcutCheck_ != nullptr && createDesktopShortcutCheck_->isChecked()) {
     QString appPath = QApplication::applicationFilePath();
     QFileInfo appInfo(appPath);
     QString launcherPath = appInfo.absolutePath() + "/veil-vpn.exe";
@@ -602,7 +602,7 @@ void SetupWizard::onFinishClicked() {
     }
   }
 
-  if (createStartMenuShortcutCheck_ && createStartMenuShortcutCheck_->isChecked()) {
+  if (createStartMenuShortcutCheck_ != nullptr && createStartMenuShortcutCheck_->isChecked()) {
     QString appPath = QApplication::applicationFilePath();
     QFileInfo appInfo(appPath);
     QString launcherPath = appInfo.absolutePath() + "/veil-vpn.exe";
