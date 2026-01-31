@@ -119,35 +119,79 @@ void AnimatedStackedWidget::setCurrentWidgetAnimated(int index) {
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
-      stackedWidget_(new AnimatedStackedWidget(this)),
-      connectionWidget_(new ConnectionWidget(this)),
-      settingsWidget_(new SettingsWidget(this)),
-      diagnosticsWidget_(new DiagnosticsWidget(this)),
-      setupWizard_(new SetupWizard(this)),
-      statisticsWidget_(new StatisticsWidget(this)),
-      serverListWidget_(new ServerListWidget(this)),
+      stackedWidget_(nullptr),
+      connectionWidget_(nullptr),
+      settingsWidget_(nullptr),
+      diagnosticsWidget_(nullptr),
+      setupWizard_(nullptr),
+      statisticsWidget_(nullptr),
+      serverListWidget_(nullptr),
       dataUsageWidget_(nullptr),
-      usageTracker_(new UsageTracker(this)),
-      ipcManager_(std::make_unique<IpcClientManager>(this)),
+      usageTracker_(nullptr),
+      ipcManager_(nullptr),
       trayIcon_(nullptr),
       trayMenu_(nullptr),
       trayConnectAction_(nullptr),
       trayDisconnectAction_(nullptr),
-      updateChecker_(std::make_unique<UpdateChecker>(this)) {
+      updateChecker_(nullptr) {
+  qDebug().noquote() << "MainWindow: Creating widgets...";
+
+  qDebug().noquote() << "MainWindow: Creating AnimatedStackedWidget...";
+  stackedWidget_ = new AnimatedStackedWidget(this);
+
+  qDebug().noquote() << "MainWindow: Creating ConnectionWidget...";
+  connectionWidget_ = new ConnectionWidget(this);
+
+  qDebug().noquote() << "MainWindow: Creating SettingsWidget...";
+  settingsWidget_ = new SettingsWidget(this);
+
+  qDebug().noquote() << "MainWindow: Creating DiagnosticsWidget...";
+  diagnosticsWidget_ = new DiagnosticsWidget(this);
+
+  qDebug().noquote() << "MainWindow: Creating SetupWizard...";
+  setupWizard_ = new SetupWizard(this);
+
+  qDebug().noquote() << "MainWindow: Creating StatisticsWidget...";
+  statisticsWidget_ = new StatisticsWidget(this);
+
+  qDebug().noquote() << "MainWindow: Creating ServerListWidget...";
+  serverListWidget_ = new ServerListWidget(this);
+
+  qDebug().noquote() << "MainWindow: Creating UsageTracker...";
+  usageTracker_ = new UsageTracker(this);
+
   // Load persistent usage data
+  qDebug().noquote() << "MainWindow: Loading usage data...";
   usageTracker_->load();
+
+  qDebug().noquote() << "MainWindow: Creating DataUsageWidget...";
   dataUsageWidget_ = new DataUsageWidget(usageTracker_, this);
 
-  qDebug() << "MainWindow: Initializing GUI components...";
+  qDebug().noquote() << "MainWindow: Creating IpcClientManager...";
+  ipcManager_ = std::make_unique<IpcClientManager>(this);
+
+  qDebug().noquote() << "MainWindow: Creating UpdateChecker...";
+  updateChecker_ = std::make_unique<UpdateChecker>(this);
+
+  qDebug() << "MainWindow: All widgets created, initializing GUI components...";
+
+  qDebug().noquote() << "MainWindow: setupUi()...";
   setupUi();
+  qDebug().noquote() << "MainWindow: setupIpcConnections()...";
   setupIpcConnections();
+  qDebug().noquote() << "MainWindow: setupMenuBar()...";
   setupMenuBar();
+  qDebug().noquote() << "MainWindow: setupStatusBar()...";
   setupStatusBar();
+  qDebug().noquote() << "MainWindow: setupSystemTray()...";
   setupSystemTray();
+  qDebug().noquote() << "MainWindow: setupUpdateChecker()...";
   setupUpdateChecker();
+  qDebug().noquote() << "MainWindow: loadThemePreference()...";
   loadThemePreference();
 
   // Load notification preferences on startup
+  qDebug().noquote() << "MainWindow: Loading notification preferences...";
   NotificationPreferences::instance().load();
 
   qDebug() << "MainWindow: GUI components initialized";

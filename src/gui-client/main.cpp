@@ -6,6 +6,10 @@
 #include <QSettings>
 #include <QLibraryInfo>
 
+#include <cstdio>
+#include <cstdlib>
+#include <exception>
+
 #ifdef QT_NETWORK_LIB
 #include <QSslSocket>
 #endif
@@ -14,10 +18,47 @@
 #include "common/version.h"
 
 #ifdef _WIN32
+#include <windows.h>
 #include "windows/service_manager.h"
 #endif
 
+namespace {
+
+/// Custom message handler that flushes stderr after every Qt debug/warning message.
+/// This ensures log output is visible even if the application crashes immediately after.
+void flushingMessageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg) {
+  QByteArray localMsg = msg.toLocal8Bit();
+  const char* msgStr = localMsg.constData();
+
+  switch (type) {
+    case QtDebugMsg:
+      fprintf(stderr, "%s\n", msgStr);
+      break;
+    case QtInfoMsg:
+      fprintf(stderr, "Info: %s\n", msgStr);
+      break;
+    case QtWarningMsg:
+      fprintf(stderr, "Warning: %s\n", msgStr);
+      break;
+    case QtCriticalMsg:
+      fprintf(stderr, "Critical: %s\n", msgStr);
+      break;
+    case QtFatalMsg:
+      fprintf(stderr, "Fatal: %s\n", msgStr);
+      break;
+  }
+  fflush(stderr);
+
+  // Suppress unused parameter warning
+  (void)context;
+}
+
+}  // namespace
+
 int main(int argc, char* argv[]) {
+  // Install flushing message handler so log output is visible even on crash
+  qInstallMessageHandler(flushingMessageHandler);
+
   QApplication app(argc, argv);
 
   // Log Qt and SSL information for debugging
@@ -158,21 +199,40 @@ int main(int argc, char* argv[]) {
   QStringList args = app.arguments();
   bool startMinimized = args.contains("--minimized") || args.contains("-m");
 
-  // Create main window
-  veil::gui::MainWindow window;
+  try {
+    // Create main window
+    veil::gui::MainWindow window;
 
-  qDebug() << "Main window created successfully";
+    qDebug() << "Main window created successfully";
 
-  // Show window unless minimized flag is set
-  if (!startMinimized) {
-    window.show();
-    qDebug() << "Main window shown";
-  } else {
-    qDebug() << "Starting minimized due to --minimized flag";
-    // Window will be hidden by the startMinimized logic in MainWindow constructor
-    window.show();  // Still call show() first, then hide() in constructor
+    // Show window unless minimized flag is set
+    if (!startMinimized) {
+      window.show();
+      qDebug() << "Main window shown";
+    } else {
+      qDebug() << "Starting minimized due to --minimized flag";
+      // Window will be hidden by the startMinimized logic in MainWindow constructor
+      window.show();  // Still call show() first, then hide() in constructor
+    }
+
+    qDebug() << "Entering application event loop";
+    return app.exec();
+  } catch (const std::exception& e) {
+    qCritical() << "FATAL: Unhandled exception during startup:" << e.what();
+#ifdef _WIN32
+    // Keep console open so the user can read the error
+    fprintf(stderr, "\nPress Enter to exit...\n");
+    fflush(stderr);
+    getchar();
+#endif
+    return 1;
+  } catch (...) {
+    qCritical() << "FATAL: Unknown exception during startup";
+#ifdef _WIN32
+    fprintf(stderr, "\nPress Enter to exit...\n");
+    fflush(stderr);
+    getchar();
+#endif
+    return 1;
   }
-
-  qDebug() << "Entering application event loop";
-  return app.exec();
 }
