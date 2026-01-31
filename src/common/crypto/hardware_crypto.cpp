@@ -60,7 +60,8 @@ std::uint64_t obfuscate_sequence_sw(std::uint64_t sequence,
 // AES key expansion helper functions
 // These expand a 256-bit key into 15 round keys for AES-256
 
-inline __m128i aes_128_key_expansion_assist(__m128i temp1, __m128i temp2) {
+// Retained for potential AES-128 support in the future
+[[maybe_unused]] inline __m128i aes_128_key_expansion_assist(__m128i temp1, __m128i temp2) {
   __m128i temp3;
   temp2 = _mm_shuffle_epi32(temp2, 0xFF);
   temp3 = _mm_slli_si128(temp1, 0x4);

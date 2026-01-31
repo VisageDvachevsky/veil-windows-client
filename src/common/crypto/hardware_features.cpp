@@ -210,6 +210,7 @@ const FeaturesHolder& get_features_holder() {
 
 }  // namespace
 
+// NOLINTNEXTLINE(bugprone-exception-escape)
 const CpuFeatures& get_cpu_features() noexcept {
   return get_features_holder().features;
 }
