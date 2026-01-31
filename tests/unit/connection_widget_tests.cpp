@@ -113,7 +113,7 @@ TEST_F(ConnectionWidgetTest, StateTransitionToError) {
 
 TEST_F(ConnectionWidgetTest, UpdateMetricsBasic) {
   widget_->setConnectionState(ConnectionState::kConnected);
-  widget_->updateMetrics(50, uint64_t{1024} * 100, uint64_t{1024} * 50);  // 50ms, 100KB/s, 50KB/s
+  widget_->updateMetrics(50, 1024ULL * 100, 1024ULL * 50);  // 50ms, 100KB/s, 50KB/s
   // Should not crash
 }
 
@@ -354,7 +354,7 @@ TEST_F(ConnectionWidgetTest, RapidStateChanges) {
 TEST_F(ConnectionWidgetTest, UpdateMetricsRapidly) {
   widget_->setConnectionState(ConnectionState::kConnected);
   for (int i = 0; i < 100; ++i) {
-    widget_->updateMetrics(i % 100, static_cast<uint64_t>(i) * 1024U, static_cast<uint64_t>(i) * 512U);
+    widget_->updateMetrics(i % 100, static_cast<uint64_t>(i) * 1024, static_cast<uint64_t>(i) * 512);
   }
 }
 

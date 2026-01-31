@@ -122,10 +122,8 @@ class StatusRing : public QWidget {
 
       // Checkmark
       painter.setPen(QPen(QColor("#0d1117"), 3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-      painter.drawLine(static_cast<int>(ix) + 12, static_cast<int>(iy) + 20,
-                       static_cast<int>(ix) + 16, static_cast<int>(iy) + 26);
-      painter.drawLine(static_cast<int>(ix) + 16, static_cast<int>(iy) + 26,
-                       static_cast<int>(ix) + 26, static_cast<int>(iy) + 14);
+      painter.drawLine(QPointF(ix + 12, iy + 20), QPointF(ix + 16, iy + 26));
+      painter.drawLine(QPointF(ix + 16, iy + 26), QPointF(ix + 26, iy + 14));
     } else if (state_ == ConnectionState::kDisconnected) {
       // Shield outline
       painter.setPen(QPen(baseColor, 2));
