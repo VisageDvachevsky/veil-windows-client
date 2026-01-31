@@ -231,7 +231,7 @@ void IpcClientManager::handleMessage(const ipc::Message& msg) {
   if (msg.type == ipc::MessageType::kEvent) {
     qDebug() << "[IpcClientManager] Message is an Event";
     const auto* event = std::get_if<ipc::Event>(&msg.payload);
-    if (!event) {
+    if (event == nullptr) {
       qWarning() << "[IpcClientManager] Failed to extract Event from message payload";
       return;
     }

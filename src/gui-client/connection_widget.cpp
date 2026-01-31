@@ -776,7 +776,7 @@ void ConnectionWidget::onPulseAnimation() {
     animationPhase_ -= 1.0;
   }
 
-  if (statusRing_) {
+  if (statusRing_ != nullptr) {
     static_cast<StatusRing*>(statusRing_)->setPulsePhase(animationPhase_);
   }
 }
@@ -805,7 +805,7 @@ void ConnectionWidget::startPulseAnimation() {
 void ConnectionWidget::stopPulseAnimation() {
   pulseTimer_->stop();
   animationPhase_ = 0.0;
-  if (statusRing_) {
+  if (statusRing_ != nullptr) {
     static_cast<StatusRing*>(statusRing_)->setPulsePhase(0.0);
   }
 }
