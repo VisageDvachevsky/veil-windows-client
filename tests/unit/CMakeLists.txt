@@ -102,6 +102,10 @@ if(Qt6_FOUND)
     ${CMAKE_SOURCE_DIR}/src/gui-client/connection_widget.h
     ${CMAKE_SOURCE_DIR}/src/gui-client/server_selector_widget.cpp
     ${CMAKE_SOURCE_DIR}/src/gui-client/server_selector_widget.h
+    ${CMAKE_SOURCE_DIR}/src/gui-client/server_config.cpp
+    ${CMAKE_SOURCE_DIR}/src/gui-client/server_config.h
+    ${CMAKE_SOURCE_DIR}/src/gui-client/server_list_widget.cpp
+    ${CMAKE_SOURCE_DIR}/src/gui-client/server_list_widget.h
     ipc_client_manager_tests.cpp
     ${CMAKE_SOURCE_DIR}/src/gui-client/ipc_client_manager.cpp
     ${CMAKE_SOURCE_DIR}/src/gui-client/ipc_client_manager.h
@@ -112,6 +116,8 @@ if(Qt6_FOUND)
     ${CMAKE_SOURCE_DIR}/src/gui-client/collapsible_section.h
     ${CMAKE_SOURCE_DIR}/src/gui-client/app_split_tunnel_widget.cpp
     ${CMAKE_SOURCE_DIR}/src/gui-client/app_split_tunnel_widget.h
+    ${CMAKE_SOURCE_DIR}/src/gui-client/notification_preferences.cpp
+    ${CMAKE_SOURCE_DIR}/src/gui-client/notification_preferences.h
   )
 
   target_include_directories(veil_gui_tests PRIVATE
