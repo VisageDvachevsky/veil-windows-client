@@ -8,7 +8,7 @@
 namespace veil::gui {
 
 CollapsibleSection::CollapsibleSection(const QString& title, QWidget* parent)
-    : QWidget(parent), collapsed_(false), expandedHeight_(0) {
+    : QWidget(parent) {
   setupUi();
   setTitle(title);
 }

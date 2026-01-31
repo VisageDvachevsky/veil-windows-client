@@ -1,5 +1,7 @@
 #pragma once
 
+#include <utility>
+
 #include <QSettings>
 #include <QString>
 #include <QDateTime>
@@ -15,16 +17,19 @@ struct NotificationEvent {
   QString eventType;  // "connection", "minimized", "update", "error"
 
   NotificationEvent() = default;
-  NotificationEvent(const QString& title_, const QString& message_, const QString& eventType_)
+  NotificationEvent(QString title_, QString message_, QString eventType_)
       : timestamp(QDateTime::currentDateTime()),
-        title(title_),
-        message(message_),
-        eventType(eventType_) {}
+        title(std::move(title_)),
+        message(std::move(message_)),
+        eventType(std::move(eventType_)) {}
 };
 
 /// Manages notification preferences and history
 class NotificationPreferences {
  public:
+  NotificationPreferences(const NotificationPreferences&) = delete;
+  NotificationPreferences& operator=(const NotificationPreferences&) = delete;
+
   /// Get the singleton instance
   static NotificationPreferences& instance();
 
@@ -73,8 +78,6 @@ class NotificationPreferences {
 
  private:
   NotificationPreferences() = default;
-  NotificationPreferences(const NotificationPreferences&) = delete;
-  NotificationPreferences& operator=(const NotificationPreferences&) = delete;
 
   void loadHistory();
   void saveHistory();
