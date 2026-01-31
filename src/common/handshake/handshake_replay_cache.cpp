@@ -58,7 +58,7 @@ std::size_t HandshakeReplayCache::cleanup_expired_locked(std::uint64_t current_t
   // Assumes mutex is already held by caller
   std::size_t removed = 0;
   const std::uint64_t cutoff_ms =
-      current_time_ms > static_cast<std::uint64_t>(time_window_.count())
+      current_time_ms > static_cast<std::uint64_t>(time_window_.count())  // NOLINT(modernize-use-integer-sign-comparison)
           ? current_time_ms - static_cast<std::uint64_t>(time_window_.count())
           : 0;
 

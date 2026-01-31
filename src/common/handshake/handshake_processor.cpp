@@ -161,7 +161,7 @@ bool timestamp_valid(std::uint64_t remote_ts, std::chrono::milliseconds skew,
                      const std::function<std::chrono::system_clock::time_point()>& now_fn) {
   const auto now_ms = to_millis(now_fn());
   const auto diff = (remote_ts > now_ms) ? (remote_ts - now_ms) : (now_ms - remote_ts);
-  return diff <= static_cast<std::uint64_t>(skew.count());
+  return diff <= static_cast<std::uint64_t>(skew.count());  // NOLINT(modernize-use-integer-sign-comparison)
 }
 
 }  // namespace

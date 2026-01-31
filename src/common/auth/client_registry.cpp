@@ -37,12 +37,14 @@ ClientRegistry::~ClientRegistry() {
   fallback_psk_.reset();
 }
 
+// NOLINTNEXTLINE(bugprone-exception-escape)
 ClientRegistry::ClientRegistry(ClientRegistry&& other) noexcept {
   std::unique_lock other_lock(other.mutex_);
   clients_ = std::move(other.clients_);
   fallback_psk_ = std::move(other.fallback_psk_);
 }
 
+// NOLINTNEXTLINE(bugprone-exception-escape)
 ClientRegistry& ClientRegistry::operator=(ClientRegistry&& other) noexcept {
   if (this != &other) {
     // Lock both mutexes in a consistent order to avoid deadlock
