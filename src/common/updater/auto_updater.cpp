@@ -668,8 +668,6 @@ bool AutoUpdater::install_update(
   error = "Auto-installation not implemented for this platform";
   return false;
 #endif
-
-  return true;
 }
 
 std::optional<ReleaseInfo> AutoUpdater::get_cached_release() const {

@@ -23,6 +23,8 @@
 
 namespace veil::gui {
 
+// NOLINTBEGIN(readability-implicit-bool-conversion)
+
 SettingsWidget::SettingsWidget(QWidget* parent) : QWidget(parent) {
   // Initialize validation debounce timer
   validationDebounceTimer_ = new QTimer(this);
@@ -1141,6 +1143,7 @@ void SettingsWidget::onLaunchOnStartupChanged([[maybe_unused]] int state) {
   registrySettings.sync();
   hasUnsavedChanges_ = true;
 #else
+  (void)state;  // Used only on Windows
   // Not Windows - disable checkbox
   launchOnWindowsStartupCheck_->setChecked(false);
   launchOnWindowsStartupCheck_->setEnabled(false);
@@ -1696,5 +1699,7 @@ void SettingsWidget::onAdvancedModeToggled(bool showAdvanced) {
   dpiBypassSection_->setVisible(showAdvanced);
   advancedSection_->setVisible(showAdvanced);
 }
+
+// NOLINTEND(readability-implicit-bool-conversion)
 
 }  // namespace veil::gui
